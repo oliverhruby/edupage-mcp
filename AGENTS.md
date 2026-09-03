@@ -171,6 +171,8 @@ reference" table and the tool count in the "What it provides" blurb.
 Publishing uses **OIDC trusted publishing** via GitHub Actions — no API token.
 See comments at the top of `.github/workflows/publish.yml` for the one-time PyPI
 registration (project `edupage-mcp-full`, workflow name `publish.yml`).
+GitHub Releases are created automatically on tag push by
+`.github/workflows/release.yml` using GitHub's generated release notes.
 
 To release a new version:
 
