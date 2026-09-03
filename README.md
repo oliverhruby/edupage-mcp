@@ -192,6 +192,11 @@ For HTTP transports, set optional runtime vars:
 - `MCP_TRANSPORT`: `stdio` (default), `sse`, or `streamable-http`
 - `MCP_HOST`: bind host (default `127.0.0.1`)
 - `MCP_PORT`: bind port (default `8000`)
+- `MCP_API_KEY`: optional bearer token for HTTP auth
+
+When `MCP_API_KEY` is set, HTTP requests must include `Authorization: Bearer <key>`.
+If `MCP_API_KEY` is not set, HTTP endpoints are unauthenticated. For production,
+prefer proper authentication and TLS via a reverse proxy or API gateway.
 
 > `pyproject.toml` pins `mcp<2` (the stable FastMCP v1 API). `mcp 2.x` renamed
 > `FastMCP` to `MCPServer` and changed the API surface; this server targets the
