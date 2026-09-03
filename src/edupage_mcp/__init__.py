@@ -1193,11 +1193,16 @@ def main():
                 _autologin(subs)
         else:
             _autodiscover()
-    transport = MCP_TRANSPORT
-    if transport in ("sse", "streamable-http"):
-        if MCP_HOST == "0.0.0.0" and not MCP_API_KEY:
-            sys.stderr.write("Error: MCP_API_KEY must be set when binding to 0.0.0.0 for HTTP transport.\n")
-            sys.exit(1)
+    transport = MCP_TRANSPORT.strip().lower()
+    allowed = {"stdio", "sse", "streamable-http"}
+    if transport not in allowed:
+        sys.stderr.write(
+            f"Error: invalid MCP_TRANSPORT '{MCP_TRANSPORT}'. Expected one of: {', '.join(sorted(allowed))}.\n"
+        )
+        sys.exit(1)
+    if transport in ("sse", "streamable-http") and MCP_HOST == "0.0.0.0" and not MCP_API_KEY:
+        sys.stderr.write("Error: MCP_API_KEY must be set when binding to 0.0.0.0 for HTTP transport.\n")
+        sys.exit(1)
     server.run(transport=transport)
 
 
