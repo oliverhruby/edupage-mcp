@@ -21,20 +21,40 @@ jobs:
       - name: Build Docker image
         run: docker build -t edupage-mcp:ci .
 
-      - name: Run Trivy scan (fail on HIGH/CRITICAL)
+      - name: Run Trivy gate scan (HIGH/CRITICAL)
+        id: trivy_gate
+        continue-on-error: true
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: edupage-mcp:ci
-          format: sarif
-          output: trivy-results.sarif
+          format: table
           severity: HIGH,CRITICAL
-          limit-severities-for-sarif: true
           scanners: vuln
           ignore-unfixed: true
           trivyignores: .trivyignore
           exit-code: 1
 
+      - name: Run Trivy SARIF scan (all severities)
+        if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: edupage-mcp:ci
+          format: sarif
+          output: trivy-results.sarif
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          scanners: vuln
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: 0
+
       - name: Upload Trivy scan results to GitHub Security
+        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-results.sarif
+
+      - name: Enforce HIGH/CRITICAL gate
+        if: steps.trivy_gate.outcome == 'failure'
+        run: |
+          echo "Trivy gate failed: HIGH/CRITICAL vulnerability detected."
+          exit 1
