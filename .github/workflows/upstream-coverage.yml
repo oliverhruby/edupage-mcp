@@ -1,4 +1,4 @@
-name: upstream-coverage
+name: Upstream Coverage
 
 on:
   pull_request:

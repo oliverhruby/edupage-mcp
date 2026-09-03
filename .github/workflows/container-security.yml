@@ -1,4 +1,4 @@
-name: container-security
+name: Container Security
 
 on:
   push:

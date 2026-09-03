@@ -1,4 +1,4 @@
-name: quality-gates
+name: Quality Gates
 
 on:
   pull_request:

@@ -7,7 +7,7 @@
 #
 # A failing audit (found CVEs) fails the workflow so it can't be missed.
 
-name: security
+name: Security
 
 on:
   push:
