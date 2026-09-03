@@ -130,6 +130,11 @@ A single stdio MCP server exposing **44 tools** (published on PyPI as
 
 ### 1. Install
 
+If you are using an AI coding client, a simple prompt is often enough to get
+started, for example: "Install the EduPage MCP as described in this repo
+oliverhruby/edupage-mcp". Most MCP-capable clients can then guide you through
+the available setup options.
+
 **Option A — from PyPI (recommended)**
 
 Use this for normal usage with a released version.
