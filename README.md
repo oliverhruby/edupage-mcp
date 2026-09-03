@@ -163,6 +163,24 @@ uv sync               # or: python -m venv .venv && .venv/bin/python -m pip inst
 uv run edupage-mcp-full
 ```
 
+**Option D — Docker**
+
+Use this for an isolated container runtime.
+
+```bash
+docker build -t edupage-mcp-full .
+
+docker run --rm -i \
+  -e EDUPAGE_USERNAME=your_username \
+  -e EDUPAGE_PASSWORD=your_password \
+  edupage-mcp-full
+```
+
+The container uses the same environment variables described in
+[Configure credentials](#2-configure-credentials). It also includes a
+`HEALTHCHECK` (stdio process liveness by default; local TCP check in HTTP
+transport modes).
+
 > `pyproject.toml` pins `mcp<2` (the stable FastMCP v1 API). `mcp 2.x` renamed
 > `FastMCP` to `MCPServer` and changed the API surface; this server targets the
 > FastMCP v1 API for simplicity and stability.
@@ -221,41 +239,6 @@ logs into all of them on startup with your shared credentials.
 `env` block with your credentials.
 
 After editing client config, **restart the client** so the MCP server is loaded.
-
-### 4. Run with Docker
-
-The project includes an Alpine-based Docker image for containerized deployment.
-
-#### Build the image
-
-```bash
-docker build -t edupage-mcp-full .
-```
-
-#### Run the container (stdio)
-
-The server communicates over stdio and expects to be connected to an MCP client.
-
-```bash
-docker run --rm -i \
-  -e EDUPAGE_USERNAME=your_username \
-  -e EDUPAGE_PASSWORD=your_password \
-  edupage-mcp-full
-```
-
-#### Environment variables
-
-All existing environment variables are supported:
-
-- `EDUPAGE_USERNAME`: EduPage username/email
-- `EDUPAGE_PASSWORD`: EduPage password
-- `EDUPAGE_SUBDOMAINS`: Comma-separated subdomains for multi-school auto-login (optional)
-- `EDUPAGE_OTP_SECRET`: TOTP secret for 2FA-enabled accounts (optional)
-
-The image includes a `HEALTHCHECK`:
-
-- In `stdio` mode (default): healthy when the process is running.
-- In HTTP transports: healthy when a local TCP connection to `MCP_PORT` succeeds.
 
 ---
 
