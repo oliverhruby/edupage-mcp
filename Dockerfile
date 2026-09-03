@@ -8,21 +8,14 @@ WORKDIR /app
 RUN adduser --disabled-password --gecos '' appuser
 EXPOSE 8000
 
-# Copy dependency definitions
-COPY pyproject.toml .
-COPY requirements.txt .
-
-# Install dependencies
-RUN pip install --no-cache-dir -e .
-
-# Copy the rest of the application
+# Copy project files needed for install
+COPY pyproject.toml README.md LICENSE ./
 COPY src/ ./src/
-COPY README.md .
-COPY LICENSE .
+
+# Install the application and its dependencies (non-editable for runtime)
+RUN pip install --no-cache-dir .
 
 # Change to non-root user
 USER appuser
 
-# The edupage-mcp-full console script is installed by the editable install above
-# Alternatively, we can use: python -m edupage_mcp
 ENTRYPOINT ["python", "-m", "edupage_mcp"]
