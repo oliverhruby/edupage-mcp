@@ -31,8 +31,8 @@ ordering), messages, rosters, parent child-switching and more — including
 - [Multiple schools (subdomains)](#multiple-schools-subdomains)
 - [Tool reference](#tool-reference)
 - [Data & safety notes](#data--safety-notes)
-- [Architecture & implementation](#architecture--implementation)
 - [Developer guide](#developer-guide)
+  - [Architecture & implementation details](#architecture--implementation-details)
   - [Releases](#releases)
   - [Quality gates (PRs)](#quality-gates-prs)
 - [Limitations](#limitations)
@@ -391,7 +391,12 @@ fully automatic.
 
 ---
 
-## Architecture & implementation
+## Developer guide
+
+Contributor and maintainer information starts here. If you only want to run the
+server, you can stop after the user sections above.
+
+### Architecture & implementation details
 
 ### High-level design
 
@@ -490,10 +495,6 @@ The server uses Python-only deps and is pinned to `mcp<2`. Both `uvx` and the
 `pip install -e .` dev path keep the package isolated from any unrelated global
 `mcp` (e.g. a newer v2.x) install, because each runs in its own environment —
 see [Install](#1-install).
-
----
-
-## Developer guide
 
 ### Releases
 
