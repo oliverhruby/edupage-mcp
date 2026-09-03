@@ -129,7 +129,9 @@ A single stdio MCP server exposing **44 tools** (published on PyPI as
 
 ### 1. Install
 
-**Option A — from PyPI (recommended):**
+**Option A — from PyPI (recommended)**
+
+Use this for normal usage with a released version.
 
 ```bash
 uvx edupage-mcp-full
@@ -137,11 +139,12 @@ uvx edupage-mcp-full
 pip install edupage-mcp-full
 ```
 
-`uvx` runs the package **without** installing it — this is the canonical way MCP
-servers are launched. `uv` is required for `uvx` (install with
-`pip install uv` or `winget install astral-sh.uv`).
+`uvx` runs the package without a persistent install. If `uvx` is unavailable,
+install `uv` first (`pip install uv` or `winget install astral-sh.uv`).
 
-**Option B — from GitHub (latest source):**
+**Option B — from GitHub (latest source)**
+
+Use this if you want the latest changes before a PyPI release.
 
 ```bash
 uvx --from "git+https://github.com/oliverhruby/edupage-mcp.git" edupage-mcp-full
@@ -149,7 +152,9 @@ uvx --from "git+https://github.com/oliverhruby/edupage-mcp.git" edupage-mcp-full
 pip install "git+https://github.com/oliverhruby/edupage-mcp.git"
 ```
 
-**Option C — development from source:**
+**Option C — development from source**
+
+Use this if you are contributing or debugging locally.
 
 ```bash
 git clone https://github.com/oliverhruby/edupage-mcp.git
