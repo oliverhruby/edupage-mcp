@@ -260,18 +260,17 @@ All existing environment variables are supported:
 ## Usage examples
 
 ```text
-
-> **Note**: To run the container in HTTP mode (SSE or streamable-http), set the `MCP_TRANSPORT`, `MCP_HOST`, `MCP_PORT`, and optionally `MCP_API_KEY` environment variables, and map the container port (e.g., `-p 8000:8000`). Example:
-```bash
-docker run --rm -i -p 8000:8000 \
-  -e EDUPAGE_USERNAME=your_username \
-  -e EDUPAGE_PASSWORD=your_password \
-  -e MCP_TRANSPORT=sse \
-  -e MCP_HOST=0.0.0.0 \
-  -e MCP_PORT=8000 \
-  -e MCP_API_KEY=your_secret_key \
-  edupage-mcp-full
-```
+# NOTE: To run the container in HTTP mode (SSE or streamable-http), set MCP_TRANSPORT, MCP_HOST, MCP_PORT,
+# and set MCP_API_KEY when binding to 0.0.0.0. Also map the container port (e.g., -p 8000:8000).
+# Example:
+# docker run --rm -i -p 8000:8000 \
+#   -e EDUPAGE_USERNAME=your_username \
+#   -e EDUPAGE_PASSWORD=your_password \
+#   -e MCP_TRANSPORT=sse \
+#   -e MCP_HOST=0.0.0.0 \
+#   -e MCP_PORT=8000 \
+#   -e MCP_API_KEY=your_secret_key \
+#   edupage-mcp-full
 # Check the MCP is alive and see which schools are logged in
 auth_status
 
