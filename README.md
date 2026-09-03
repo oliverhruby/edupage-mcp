@@ -174,12 +174,16 @@ uv run edupage-mcp-full
 Use this for an isolated container runtime.
 
 ```bash
+# Use a prebuilt image from GHCR (recommended):
+docker pull ghcr.io/oliverhruby/edupage-mcp:latest
+
+# Or build locally from source:
 docker build -t edupage-mcp-full .
 
 docker run --rm -i \
   -e EDUPAGE_USERNAME=your_username \
   -e EDUPAGE_PASSWORD=your_password \
-  edupage-mcp-full
+  ghcr.io/oliverhruby/edupage-mcp:latest
 ```
 
 The container uses the same environment variables described in
@@ -519,8 +523,9 @@ New versions are published to PyPI automatically via GitHub Actions using
 **OpenID Connect trusted publishing** (no manual token). Pushing a tag such as
 `v0.1.0` triggers the `publish` workflow (see `.github/workflows/publish.yml`
 for the one-time PyPI registration) and also creates a GitHub Release with
-auto-generated notes (`.github/workflows/release.yml`). `version` in
-`pyproject.toml` must match the tag.
+auto-generated notes (`.github/workflows/release.yml`). Container images are
+also published to GHCR on tags (`.github/workflows/publish-container.yml`).
+`version` in `pyproject.toml` must match the tag.
 
 ### Quality gates (PRs)
 

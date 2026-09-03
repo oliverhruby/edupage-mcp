@@ -173,6 +173,8 @@ See comments at the top of `.github/workflows/publish.yml` for the one-time PyPI
 registration (project `edupage-mcp-full`, workflow name `publish.yml`).
 GitHub Releases are created automatically on tag push by
 `.github/workflows/release.yml` using GitHub's generated release notes.
+Container images are published to GHCR on tag push by
+`.github/workflows/publish-container.yml`.
 
 To release a new version:
 
