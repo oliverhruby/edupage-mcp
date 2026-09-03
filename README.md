@@ -173,17 +173,29 @@ uv run edupage-mcp-full
 
 Use this for an isolated container runtime.
 
-```bash
-# Use a prebuilt image from GHCR (recommended):
-docker pull ghcr.io/oliverhruby/edupage-mcp:latest
+Pull a prebuilt image (recommended):
 
-# Or build locally from source:
-docker build -t edupage-mcp-full .
+```bash
+docker pull ghcr.io/oliverhruby/edupage-mcp:latest
 
 docker run --rm -i \
   -e EDUPAGE_USERNAME=your_username \
   -e EDUPAGE_PASSWORD=your_password \
   ghcr.io/oliverhruby/edupage-mcp:latest
+```
+
+Version tags are also available (for example `v0.4.0`) if you prefer pinned
+images.
+
+Build locally from source (fallback):
+
+```bash
+docker build -t edupage-mcp-full .
+
+docker run --rm -i \
+  -e EDUPAGE_USERNAME=your_username \
+  -e EDUPAGE_PASSWORD=your_password \
+  edupage-mcp-full
 ```
 
 The container uses the same environment variables described in
