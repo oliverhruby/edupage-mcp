@@ -25,6 +25,7 @@ ordering), messages, rosters, parent child-switching and more — including
 - [Getting started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [1. Install](#1-install)
+  - [Quality gates (PRs)](#quality-gates-prs)
   - [2. Configure credentials](#2-configure-credentials)
   - [3. Register with your MCP client](#3-register-with-your-mcp-client)
 - [Usage examples](#usage-examples)
@@ -166,6 +167,17 @@ New versions are published to PyPI automatically via GitHub Actions using
 `v0.1.0` triggers the `publish` workflow (see `.github/workflows/publish.yml`
 for the one-time PyPI registration). `version` in `pyproject.toml` must match
 the tag.
+
+#### Quality gates (PRs)
+
+Pull requests targeting `main` are gated by required GitHub checks:
+
+- `security / pip-audit` — scans Python dependencies for known CVEs.
+- `container-security / trivy-image` — builds the Docker image and fails on
+  `HIGH`/`CRITICAL` vulnerabilities (with `ignore-unfixed: true`).
+
+If either check fails, the PR cannot be merged until it is fixed or explicitly
+handled.
 
 ### 2. Configure credentials
 

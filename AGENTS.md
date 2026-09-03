@@ -114,6 +114,15 @@ and changed the API. We target the FastMCP v1 API. Keep `mcp<2`. Bump
   and weekly. A run that finds a CVE **fails the workflow**; fix the pinned
   version in `pyproject.toml` and re-verify with `pip-audit` locally before
   releasing.
+- **Trivy container scan** (`.github/workflows/container-security.yml`): builds
+  the Docker image and scans for vulnerabilities on every push/PR to main and
+  weekly. The job fails on `HIGH`/`CRITICAL` findings (`ignore-unfixed: true`).
+  Use `.trivyignore` only for temporary, documented exceptions.
+
+`main` branch protection requires both checks:
+
+- `security / pip-audit`
+- `container-security / trivy-image`
 
 Local check:
 
@@ -125,6 +134,7 @@ To run any workflow manually from `gh`:
 
 ```bash
 gh workflow run security.yml --repo oliverhruby/edupage-mcp
+gh workflow run container-security.yml --repo oliverhruby/edupage-mcp
 ```
 
 ## Build / verify
