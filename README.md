@@ -25,7 +25,6 @@ ordering), messages, rosters, parent child-switching and more — including
 - [Getting started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [1. Install](#1-install)
-  - [Quality gates (PRs)](#quality-gates-prs)
   - [2. Configure credentials](#2-configure-credentials)
   - [3. Register with your MCP client](#3-register-with-your-mcp-client)
 - [Usage examples](#usage-examples)
@@ -33,6 +32,9 @@ ordering), messages, rosters, parent child-switching and more — including
 - [Tool reference](#tool-reference)
 - [Data & safety notes](#data--safety-notes)
 - [Architecture & implementation](#architecture--implementation)
+- [Developer guide](#developer-guide)
+  - [Releases](#releases)
+  - [Quality gates (PRs)](#quality-gates-prs)
 - [Limitations](#limitations)
 - [License](#license)
 
@@ -159,29 +161,6 @@ uv run edupage-mcp-full
 > `pyproject.toml` pins `mcp<2` (the stable FastMCP v1 API). `mcp 2.x` renamed
 > `FastMCP` to `MCPServer` and changed the API surface; this server targets the
 > FastMCP v1 API for simplicity and stability.
-
-#### Releases
-
-New versions are published to PyPI automatically via GitHub Actions using
-**OpenID Connect trusted publishing** (no manual token). Pushing a tag such as
-`v0.1.0` triggers the `publish` workflow (see `.github/workflows/publish.yml`
-for the one-time PyPI registration). `version` in `pyproject.toml` must match
-the tag.
-
-#### Quality gates (PRs)
-
-Pull requests targeting `main` are gated by required GitHub checks:
-
-- `quality-gates / python-sanity` — compiles `src/edupage_mcp/__init__.py` and
-  verifies `pip install .` from source.
-- `quality-gates / docker-mcp-smoke` — builds the Docker image and performs a
-  real MCP stdio handshake (`initialize` + `tools/list`).
-- `security / pip-audit` — scans Python dependencies for known CVEs.
-- `container-security / trivy-image` — builds the Docker image and fails on
-  `HIGH`/`CRITICAL` vulnerabilities (with `ignore-unfixed: true`).
-
-If either check fails, the PR cannot be merged until it is fixed or explicitly
-handled.
 
 ### 2. Configure credentials
 
@@ -562,6 +541,34 @@ The server uses Python-only deps and is pinned to `mcp<2`. Both `uvx` and the
 `pip install -e .` dev path keep the package isolated from any unrelated global
 `mcp` (e.g. a newer v2.x) install, because each runs in its own environment —
 see [Install](#1-install).
+
+---
+
+## Developer guide
+
+### Releases
+
+New versions are published to PyPI automatically via GitHub Actions using
+**OpenID Connect trusted publishing** (no manual token). Pushing a tag such as
+`v0.1.0` triggers the `publish` workflow (see `.github/workflows/publish.yml`
+for the one-time PyPI registration). `version` in `pyproject.toml` must match
+the tag.
+
+### Quality gates (PRs)
+
+Pull requests targeting `main` are gated by required GitHub checks:
+
+- `quality-gates / python-sanity` — compiles `src/edupage_mcp/__init__.py` and
+  verifies `pip install .` from source.
+- `quality-gates / docker-mcp-smoke` — builds the Docker image and performs a
+  real MCP stdio handshake (`initialize` + `tools/list`).
+- `security / pip-audit` — scans Python dependencies for known CVEs.
+- `container-security / trivy-image` — enforces a vulnerability gate on
+  `HIGH`/`CRITICAL` findings while still uploading full-severity SARIF results
+  to GitHub Security.
+
+If a required check fails, the PR cannot be merged until it is fixed or
+explicitly handled.
 
 ---
 
