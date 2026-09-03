@@ -222,6 +222,41 @@ logs into all of them on startup with your shared credentials.
 
 After editing client config, **restart the client** so the MCP server is loaded.
 
+### 4. Run with Docker
+
+The project includes an Alpine-based Docker image for containerized deployment.
+
+#### Build the image
+
+```bash
+docker build -t edupage-mcp-full .
+```
+
+#### Run the container (stdio)
+
+The server communicates over stdio and expects to be connected to an MCP client.
+
+```bash
+docker run --rm -i \
+  -e EDUPAGE_USERNAME=your_username \
+  -e EDUPAGE_PASSWORD=your_password \
+  edupage-mcp-full
+```
+
+#### Environment variables
+
+All existing environment variables are supported:
+
+- `EDUPAGE_USERNAME`: EduPage username/email
+- `EDUPAGE_PASSWORD`: EduPage password
+- `EDUPAGE_SUBDOMAINS`: Comma-separated subdomains for multi-school auto-login (optional)
+- `EDUPAGE_OTP_SECRET`: TOTP secret for 2FA-enabled accounts (optional)
+
+The image includes a `HEALTHCHECK`:
+
+- In `stdio` mode (default): healthy when the process is running.
+- In HTTP transports: healthy when a local TCP connection to `MCP_PORT` succeeds.
+
 ---
 
 ## Usage examples
