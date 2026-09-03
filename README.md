@@ -172,6 +172,10 @@ the tag.
 
 Pull requests targeting `main` are gated by required GitHub checks:
 
+- `quality-gates / python-sanity` — compiles `src/edupage_mcp/__init__.py` and
+  verifies `pip install .` from source.
+- `quality-gates / docker-mcp-smoke` — builds the Docker image and performs a
+  real MCP stdio handshake (`initialize` + `tools/list`).
 - `security / pip-audit` — scans Python dependencies for known CVEs.
 - `container-security / trivy-image` — builds the Docker image and fails on
   `HIGH`/`CRITICAL` vulnerabilities (with `ignore-unfixed: true`).

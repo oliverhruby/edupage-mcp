@@ -114,6 +114,11 @@ and changed the API. We target the FastMCP v1 API. Keep `mcp<2`. Bump
   and weekly. A run that finds a CVE **fails the workflow**; fix the pinned
   version in `pyproject.toml` and re-verify with `pip-audit` locally before
   releasing.
+- **Quality gates** (`.github/workflows/quality-gates.yml`):
+  - `python-sanity` compiles `src/edupage_mcp/__init__.py` and verifies
+    `pip install .` from source.
+  - `docker-mcp-smoke` builds the Docker image and performs an MCP stdio
+    handshake (`initialize` + `tools/list`) against the container.
 - **Trivy container scan** (`.github/workflows/container-security.yml`): builds
   the Docker image and scans for vulnerabilities on every push/PR to main and
   weekly. The job fails on `HIGH`/`CRITICAL` findings (`ignore-unfixed: true`).
@@ -121,6 +126,8 @@ and changed the API. We target the FastMCP v1 API. Keep `mcp<2`. Bump
 
 `main` branch protection requires both checks:
 
+- `quality-gates / python-sanity`
+- `quality-gates / docker-mcp-smoke`
 - `security / pip-audit`
 - `container-security / trivy-image`
 
@@ -134,6 +141,7 @@ To run any workflow manually from `gh`:
 
 ```bash
 gh workflow run security.yml --repo oliverhruby/edupage-mcp
+gh workflow run quality-gates.yml --repo oliverhruby/edupage-mcp
 gh workflow run container-security.yml --repo oliverhruby/edupage-mcp
 ```
 
