@@ -1,0 +1,70 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+
+# Build artifacts
+build
+dist
+*.egg-info
+*.egg
+MANIFEST
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+.venv
+env
+venv
+
+# Environment variables
+.env
+.env.*
+
+# Logs
+*.log
+
+# IDE and editor settings
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Test and coverage
+pytest_cache
+htmlcov
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis
+.jupyter
+
+# MyPy
+.mypy_cache
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre
+
+# Packaging
+#else
+# (optional) exclude documentation if not needed
+# docs/
+# (optional) exclude tests if not needed
+# tests/
+
+# macOS
+.DS_Store

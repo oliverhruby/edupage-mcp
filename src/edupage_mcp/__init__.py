@@ -44,6 +44,13 @@ EDUPAGE_PASSWORD = os.environ.get("EDUPAGE_PASSWORD", "")
 # Comma-separated list of schools to auto-login on startup (multi-school + automatic
 # student discovery across all of them).
 EDUPAGE_SUBDOMAINS = os.environ.get("EDUPAGE_SUBDOMAINS", "")
+MCP_TRANSPORT = os.environ.get("MCP_TRANSPORT", "stdio")
+MCP_HOST = os.environ.get("MCP_HOST", "127.0.0.1")
+try:
+    MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
+except ValueError:
+    MCP_PORT = 8000
+MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
 
 # Multiple-school support: one Edupage() session per subdomain.
 _clients = {}          # subdomain -> Edupage
@@ -155,7 +162,7 @@ def _to_text(data) -> dict:
 # helper indirection so FastMCP is optional (tests can call these directly)
 # --------------------------------------------------------------------------
 if FastMCP:
-    server = FastMCP("edupage")
+    server = FastMCP("edupage", host=MCP_HOST, port=MCP_PORT)
 else:
     server = None
 
@@ -1186,7 +1193,12 @@ def main():
                 _autologin(subs)
         else:
             _autodiscover()
-    server.run()
+    transport = MCP_TRANSPORT
+    if transport in ("sse", "streamable-http"):
+        if MCP_HOST == "0.0.0.0" and not MCP_API_KEY:
+            sys.stderr.write("Error: MCP_API_KEY must be set when binding to 0.0.0.0 for HTTP transport.\n")
+            sys.exit(1)
+    server.run(transport=transport)
 
 
 def _autodiscover():

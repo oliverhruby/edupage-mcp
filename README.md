@@ -221,12 +221,57 @@ logs into all of them on startup with your shared credentials.
 `env` block with your credentials.
 
 After editing client config, **restart the client** so the MCP server is loaded.
+### 4. Run with Docker
 
----
+The project provides a Dockerfile for containerized deployment.
 
+#### Build the Image
+```bash
+docker build -t edupage-mcp-full .
+```
+
+#### Run the Container
+The server runs over stdio and expects to be connected to an MCP client. Provide EduPage credentials via environment variables:
+
+```bash
+docker run --rm -i \
+  -e EDUPAGE_USERNAME=your_username \
+  -e EDUPAGE_PASSWORD=your_password \
+  edupage-mcp-full
+```
+
+> **Note**: The `--rm` flag automatically removes the container when it stops. The `-i` flag keeps stdin open for the MCP client connection.
+
+#### Example with MCP Inspector
+To test with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
+```bash
+docker run --rm -i \
+  -e EDUPAGE_USERNAME=your_username \
+  -e EDUPAGE_PASSWORD=your_password \
+  edupage-mcp-full | npx @modelcontextprotocol/inspector
+```
+
+#### Configuration via Environment Variables
+All existing environment variables are supported:
+- `EDUPAGE_USERNAME`: EduPage username/email
+- `EDUPAGE_PASSWORD`: EduPage password
+- `EDUPAGE_SUBDOMAINS`: Comma-separated list of subdomains (optional, for auto-login)
+- `EDUPAGE_OTP_SECRET`: For TOTP-based 2FA (optional)
 ## Usage examples
 
 ```text
+
+> **Note**: To run the container in HTTP mode (SSE or streamable-http), set the `MCP_TRANSPORT`, `MCP_HOST`, `MCP_PORT`, and optionally `MCP_API_KEY` environment variables, and map the container port (e.g., `-p 8000:8000`). Example:
+```bash
+docker run --rm -i -p 8000:8000 \
+  -e EDUPAGE_USERNAME=your_username \
+  -e EDUPAGE_PASSWORD=your_password \
+  -e MCP_TRANSPORT=sse \
+  -e MCP_HOST=0.0.0.0 \
+  -e MCP_PORT=8000 \
+  -e MCP_API_KEY=your_secret_key \
+  edupage-mcp-full
+```
 # Check the MCP is alive and see which schools are logged in
 auth_status
 
