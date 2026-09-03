@@ -91,7 +91,7 @@ This project deliberately goes further:
 
 ## What it provides
 
-A single stdio MCP server exposing **43 tools** (published on PyPI as
+A single stdio MCP server exposing **44 tools** (published on PyPI as
 [`edupage-mcp-full`](https://pypi.org/project/edupage-mcp-full/)):
 
 - **Authentication** — `login`, `login_auto`, `login_all`, `login_from_session`,
@@ -103,7 +103,7 @@ A single stdio MCP server exposing **43 tools** (published on PyPI as
   `get_student_timetable` (cross-school, role-aware), `scan_students`
   (auto-discover all students across schools), `get_my_students` (classmates or
   school-wide for parents), `switch_to_student` (by id **or** name, parent only),
-  `switch_to_parent`
+  `switch_to_parent`, `clear_student_cache` (force refresh cached student lists)
 - **Schools** — `get_schools` (logged-in schools with role per school)
 - **Grades** — `get_grades`
 - **Notifications / timeline** — `get_notifications`, `get_notification_history`,
@@ -120,7 +120,7 @@ A single stdio MCP server exposing **43 tools** (published on PyPI as
 
 ### Prerequisites
 
-- Python **3.9+** (Python 3.14 on Windows is verified)
+- Python **3.10+** (Python 3.14 on Windows is verified)
 - A [GitHub](https://github.com) account only if you want the repo; not needed to run.
 - An MCP-capable client (opencode, Claude Desktop, Cursor, etc.)
 
@@ -433,6 +433,7 @@ fully automatic.
 | `get_my_students` | Students visible to the logged-in account (one school) |  |
 | `find_student` | Look up a student's person_id by name (cross-school) |  |
 | `scan_students` | Auto-discover students across **all** logged-in schools |  |
+| `clear_student_cache` | Clear cached student rosters (one school or all schools) | ✅ cache |
 | `get_schools` | List logged-in schools + role per school |  |
 | `send_message` | Send a message to a user | ✅ |
 | `switch_to_student` | Switch to a student account by id or name (parent only) | ✅ session |
@@ -481,7 +482,7 @@ serialise its data model, and make multi-school + write operations ergonomic.
 
 | File | Role |
 |---|---|
-| `src/edupage_mcp/__init__.py` | The entire MCP server (all 43 tools + `main()`). |
+| `src/edupage_mcp/__init__.py` | The entire MCP server (all 44 tools + `main()`). |
 | `src/edupage_mcp/__main__.py` | Enables running as `python -m edupage_mcp`. |
 | `pyproject.toml` | Package metadata + `edupage-mcp-full` console entry point. |
 | `requirements.txt` | Dev install (`-e .`). |
@@ -568,9 +569,10 @@ see [Install](#1-install).
   methods are best-effort.
 - The auth session lives for the lifetime of the MCP server process; restarting
   the client means logging in again.
-- **Children at different schools** require you to tell the agent which subdomain
-  each child is in (the server can't guess it). See
-  [Children by name](#children-by-name-eg-timetable-for-viktor).
+- Cross-school student discovery depends on being logged into all relevant
+  schools (via `EDUPAGE_SUBDOMAINS`, `login_all`, or repeated `login` calls).
+  If a school is not logged in, that student's results from that school cannot
+  be discovered.
 
 ---
 

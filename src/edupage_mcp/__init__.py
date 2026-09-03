@@ -16,8 +16,11 @@ import datetime as _dt
 import json
 import os
 import sys
+import time
+import unicodedata
+from urllib.parse import urlparse
 from dataclasses import fields, is_dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time as dt_time
 from enum import Enum
 from types import SimpleNamespace
 
@@ -67,6 +70,11 @@ _STUDENT_CACHE_TTL = 300  # 5 minutes
 _autologin_failures = {}  # subdomain -> error message
 
 
+def _first_subdomain_from_env():
+    subs = [s.strip() for s in EDUPAGE_SUBDOMAINS.split(",") if s.strip()]
+    return subs[0] if subs else None
+
+
 def fail(message: str) -> dict:
     return {"isError": True, "content": [{"type": "text", "text": message}]}
 
@@ -98,6 +106,45 @@ def _resolve_role(client):
     return "student"
 
 
+def _student_name(student):
+    name = getattr(student, "name", None)
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    short = getattr(student, "name_short", None)
+    if isinstance(short, str) and short.strip():
+        return short.strip()
+    return ""
+
+
+def _normalize_text(value):
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    text = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in text if not unicodedata.combining(ch))
+
+
+def _has_full_name(student):
+    name = _student_name(student)
+    if not name:
+        return False
+    parts = [p for p in name.replace(",", " ").split() if p]
+    return len(parts) >= 2 and any(len(p) > 2 for p in parts)
+
+
+def _relogin_subdomain(subdomain):
+    user = EDUPAGE_USERNAME
+    pwd = EDUPAGE_PASSWORD
+    if not (subdomain and user and pwd):
+        return False
+    client = Edupage()
+    tf = client.login(user, pwd, subdomain)
+    _clients[subdomain] = client
+    _two_factor[subdomain] = tf
+    _roles[subdomain] = _resolve_role(client)
+    return True
+
+
 def _get_students_cached(client, subdomain):
     """Get students for a school, using cache to avoid redundant API calls.
     Returns list of student-like objects with .person_id, .name, .class_id."""
@@ -108,7 +155,43 @@ def _get_students_cached(client, subdomain):
     if cached and (now - cached["timestamp"]) < _STUDENT_CACHE_TTL:
         return cached["students"]
     if role == "parent":
-        students = client.get_all_students() or []
+        students = []
+        # Prefer direct children for parent accounts (best names, smallest payload).
+        try:
+            students = client.get_my_children() or []
+        except Exception:
+            students = []
+        # Some schools return short skeleton names only (e.g. initials) even for
+        # parent views; enrich with class roster where possible.
+        if students and not any(_has_full_name(s) for s in students):
+            try:
+                class_students = client.get_students() or []
+            except Exception:
+                class_students = []
+            if class_students:
+                by_id = {str(getattr(s, "person_id", "")): s for s in students}
+                for s in class_students:
+                    by_id[str(getattr(s, "person_id", ""))] = s
+                students = list(by_id.values())
+        # Fallback to school-wide roster if children endpoint is unavailable.
+        if not students:
+            try:
+                students = client.get_all_students() or []
+            except Exception:
+                students = []
+        if students and not any(_has_full_name(s) for s in students):
+            try:
+                class_students = client.get_students() or []
+            except Exception:
+                class_students = []
+            if class_students:
+                by_id = {str(getattr(s, "person_id", "")): s for s in students}
+                for s in class_students:
+                    by_id[str(getattr(s, "person_id", ""))] = s
+                students = list(by_id.values())
+        # Last fallback to generic visible students.
+        if not students:
+            students = client.get_students() or []
     else:
         students = client.get_students() or []
     _student_cache[cache_key] = {"students": students, "timestamp": now}
@@ -129,7 +212,7 @@ def _serialize(obj):
         return None
     if isinstance(obj, (str, int, float, bool)):
         return obj
-    if isinstance(obj, (datetime, date, time)):
+    if isinstance(obj, (datetime, date, dt_time)):
         return obj.isoformat()
     if isinstance(obj, Enum):
         return obj.value
@@ -197,7 +280,7 @@ def login(username: str = None, password: str = None, subdomain: str = None) -> 
         global _clients, _two_factor, _active_subdomain
         user = username or EDUPAGE_USERNAME
         pwd = password or EDUPAGE_PASSWORD
-        sub = subdomain or EDUPAGE_SUBDOMAIN
+        sub = subdomain or _first_subdomain_from_env()
         if not (user and pwd and sub):
             raise RuntimeError(
                 "username, password and subdomain must be provided (or set as env vars)."
@@ -392,7 +475,10 @@ def get_my_timetable(date_str: str = None, subdomain: str = None) -> dict:
     def go():
         client = _require_client(subdomain)
         d = _parse_date(date_str)
-        tt = client.get_my_timetable(d)
+        try:
+            tt = client.get_my_timetable(d)
+        except (IndexError, KeyError, AttributeError, TypeError):
+            tt = None
         if tt is None:
             return {"date": d.isoformat(), "subdomain": _resolve_subdomain(subdomain), "lessons": []}
         return {"date": d.isoformat(), "subdomain": _resolve_subdomain(subdomain),
@@ -410,6 +496,9 @@ def _resolve_target(client, target_type, target_id):
     if target_type == "student":
         for s in client.get_students() or []:
             if str(s.person_id) == str(target_id):
+                return s
+        for s in client.get_all_students() or []:
+            if str(getattr(s, "person_id", "")) == str(target_id):
                 return s
         raise RuntimeError(f"Student {target_id} not found.")
     if target_type == "class":
@@ -457,56 +546,83 @@ def _find_student_all(client, name, subdomain=None):
     """Search for students matching `name` across all tiers. Returns list of
     dicts with keys: name, student_id, class_id, subdomain, tier, confidence, _raw."""
     needle = str(name).strip().lower()
+    needle_norm = _normalize_text(name)
     if not needle:
         return []
     sub = subdomain or ""
     students = _get_students_cached(client, sub)
     results = []
+
+    def safe_attr(obj, attr, default=None):
+        try:
+            value = getattr(obj, attr, default)
+        except Exception:
+            return default
+        return default if value is None else value
+
     for s in students:
-        sname = getattr(s, "name", "") or ""
+        sname = safe_attr(s, "name", "") or safe_attr(s, "name_short", "")
         # Build name parts: try full name, comma-separated, space-separated
         full_lower = sname.strip().lower()
+        full_norm = _normalize_text(sname)
         parts = [p.strip().lower() for p in sname.replace(",", " ").split() if p.strip()]
+        parts_norm = [_normalize_text(p) for p in sname.replace(",", " ").split() if p.strip()]
         # Also try the short name field if present (parent accounts)
-        short = getattr(s, "name_short", None) or ""
+        short = safe_attr(s, "name_short", "")
         short_lower = short.strip().lower()
+        short_norm_text = _normalize_text(short)
         short_parts = [p.strip().lower() for p in short.replace(",", " ").split() if p.strip()]
+        short_parts_norm = [_normalize_text(p) for p in short.replace(",", " ").split() if p.strip()]
+        short_initials = "".join(ch for ch in short_norm_text if ch.isalnum())
+        needle_parts = [p for p in needle.split() if p]
+        needle_parts_norm = [p for p in needle_norm.split() if p]
 
         tier = None
         confidence = 0.0
 
         # Tier 1: Exact full name match
-        if needle == full_lower:
+        if needle == full_lower or needle_norm == full_norm:
             tier = 1
             confidence = 1.0
         # Tier 1b: Exact short name match
-        elif short_lower and needle == short_lower:
+        elif short_lower and (needle == short_lower or needle_norm == short_norm_text):
             tier = 1
             confidence = 0.95
         # Tier 2: First name match (needle is a single word)
-        elif len(parts) >= 2 and needle == parts[0]:
+        elif len(parts) >= 2 and (needle == parts[0] or needle_norm == parts_norm[0]):
             tier = 2
             confidence = 0.85
-        elif short_parts and len(short_parts) >= 2 and needle == short_parts[0]:
+        elif short_parts and len(short_parts) >= 2 and (needle == short_parts[0] or needle_norm == short_parts_norm[0]):
             tier = 2
             confidence = 0.80
         # Tier 3: Last name match
-        elif len(parts) >= 2 and needle == parts[-1]:
+        elif len(parts) >= 2 and (needle == parts[-1] or needle_norm == parts_norm[-1]):
             tier = 3
             confidence = 0.70
-        elif short_parts and len(short_parts) >= 2 and needle == short_parts[-1]:
+        elif short_parts and len(short_parts) >= 2 and (needle == short_parts[-1] or needle_norm == short_parts_norm[-1]):
             tier = 3
             confidence = 0.65
+        # Tier 3b: initial-based short names (e.g. "Viktor Hruby" vs "VH")
+        elif short_initials and len(needle_parts_norm) >= 2:
+            initials = "".join(p[0] for p in needle_parts_norm if p)
+            if initials and short_initials.startswith(initials):
+                tier = 3
+                confidence = 0.60
         # Tier 4: Substring match (last resort, lower confidence)
-        elif needle in full_lower or (short_lower and needle in short_lower):
+        elif (
+            needle in full_lower
+            or (short_lower and needle in short_lower)
+            or (needle_norm and needle_norm in full_norm)
+            or (short_norm_text and needle_norm and needle_norm in short_norm_text)
+        ):
             tier = 4
             confidence = 0.40
 
         if tier is not None:
             results.append({
                 "name": sname,
-                "student_id": s.person_id,
-                "class_id": getattr(s, "class_id", None),
+                "student_id": safe_attr(s, "person_id", None),
+                "class_id": safe_attr(s, "class_id", None),
                 "subdomain": sub,
                 "tier": tier,
                 "confidence": confidence,
@@ -525,26 +641,57 @@ def _student_timetable_at(client, sub, name, student_id, d):
         sid = str(student_id)
         students = _get_students_cached(client, sub)
         match = next((s for s in students
-                      if str(getattr(s, "person_id", "")) == sid), None)
+                  if str(getattr(s, "person_id", "")) == sid), None)
         if match is None:
             return None
-        name = match.name
+        name = _student_name(match)
     try:
         student = _find_student(client, name, sub)
     except RuntimeError:
         return None
     sid = int(student.person_id)
+    student_name = _student_name(student) or str(sid)
     role = _roles.get(sub, "student")
     is_parent = role == "parent"
+    switch_id = sid
     if is_parent:
-        client.switch_to_child(sid)
-    try:
+        # Parent sessions can expose different IDs for visible students vs
+        # account-switching. Prefer get_child_id(name) when available.
+        try:
+            resolved = client.get_child_id(student_name)
+            if resolved is not None:
+                switch_id = int(resolved)
+        except Exception:
+            switch_id = sid
+        try:
+            client.switch_to_child(switch_id)
+            tt = client.get_my_timetable(d)
+            lessons = [_serialize(ls) for ls in tt.lessons] if tt else []
+        except Exception:
+            # Fallback path for schools/accounts where switch-to-child is not
+            # available or IDs differ from roster identifiers.
+            target = student
+            if isinstance(student, EduStudentSkeleton):
+                target = next(
+                    (s for s in (client.get_students() or []) if str(getattr(s, "person_id", "")) == str(sid)),
+                    student,
+                )
+            if isinstance(target, EduStudentSkeleton):
+                tt = None
+                lessons = []
+            else:
+                tt = client.get_timetable(target, d)
+                lessons = [_serialize(ls) for ls in tt.lessons] if tt else []
+        finally:
+            try:
+                client.switch_to_parent()
+            except Exception:
+                pass
+    else:
         tt = client.get_my_timetable(d)
         lessons = [_serialize(ls) for ls in tt.lessons] if tt else []
-    finally:
-        if is_parent:
-            client.switch_to_parent()
-    return {"student": student.name, "student_id": sid, "class_id": getattr(student, "class_id", None),
+    return {"student": student_name, "student_id": switch_id if is_parent else sid,
+            "class_id": getattr(student, "class_id", None),
             "date": d.isoformat(), "subdomain": sub, "lessons": lessons}
 
 
@@ -593,7 +740,10 @@ def get_timetable(target_type: str, target_id: str, date_str: str = None, subdom
         client = _require_client(subdomain)
         d = _parse_date(date_str)
         target = _resolve_target(client, target_type, target_id)
-        tt = client.get_timetable(target, d)
+        try:
+            tt = client.get_timetable(target, d)
+        except (IndexError, KeyError, AttributeError, TypeError):
+            tt = None
         base = {"target": f"{target_type}:{target_id}", "date": d.isoformat(),
                 "subdomain": _resolve_subdomain(subdomain)}
         if tt is None:
@@ -635,11 +785,18 @@ def get_next_week_timetable(subdomain: str = None) -> dict:
         week = []
         for i in range(5):
             d = monday + _dt.timedelta(days=i)
-            tt = client.get_my_timetable(d)
+            try:
+                tt = client.get_my_timetable(d)
+            except (IndexError, KeyError, AttributeError, TypeError):
+                tt = None
+            if tt is None:
+                lessons = []
+            else:
+                lessons = [_serialize(ls) for ls in tt.lessons]
             week.append({
                 "weekday": ["Po", "Ut", "St", "Št", "Pi"][i],
                 "date": d.isoformat(),
-                "lessons": [_serialize(ls) for ls in (tt.lessons if tt else [])],
+                "lessons": lessons,
             })
         return {"monday": monday.isoformat(), "subdomain": _resolve_subdomain(subdomain), "week": week}
 
@@ -797,7 +954,18 @@ def get_timetable_changes(date_str: str = None, subdomain: str = None) -> dict:
     def go():
         client = _require_client(subdomain)
         d = _parse_date(date_str)
-        changes = client.get_timetable_changes(d)
+        sub = _resolve_subdomain(subdomain)
+        try:
+            changes = client.get_timetable_changes(d)
+        except edupage_exceptions.ExpiredSessionException:
+            if not _relogin_subdomain(sub):
+                changes = []
+            else:
+                client = _require_client(sub)
+                try:
+                    changes = client.get_timetable_changes(d)
+                except edupage_exceptions.ExpiredSessionException:
+                    changes = []
         if changes is None:
             return {"date": d.isoformat(), "subdomain": _resolve_subdomain(subdomain), "changes": []}
         return {"date": d.isoformat(), "subdomain": _resolve_subdomain(subdomain),
@@ -828,7 +996,17 @@ def get_meals(date_str: str = None, subdomain: str = None) -> dict:
     def go():
         client = _require_client(subdomain)
         d = _parse_date(date_str)
-        meals = client.get_meals(d)
+        try:
+            meals = client.get_meals(d)
+        except (edupage_exceptions.InvalidMealsData, IndexError, AttributeError, KeyError, TypeError):
+            meals = Meals(None, None, None)
+        except edupage_exceptions.ExpiredSessionException:
+            sub = _resolve_subdomain(subdomain)
+            if _relogin_subdomain(sub):
+                client = _require_client(sub)
+                meals = client.get_meals(d)
+            else:
+                raise
         return {"date": d.isoformat(), "subdomain": _resolve_subdomain(subdomain), "meals": _serialize(meals)}
 
     return _run(go, "get_meals")
@@ -995,7 +1173,7 @@ def get_my_students(subdomain: str = None) -> dict:
         for s in students:
             classmates.append({
                 "person_id": s.person_id,
-                "name": s.name,
+                "name": _student_name(s),
                 "class_id": getattr(s, "class_id", None),
                 "number": getattr(s, "number_in_class", None),
             })
@@ -1136,7 +1314,7 @@ def scan_students() -> dict:
                         continue
                     seen.add(key)
                     discovered.append({
-                        "name": student.name,
+                        "name": _student_name(student),
                         "student_id": student.person_id,
                         "class_id": getattr(student, "class_id", None),
                         "subdomain": sub,
@@ -1176,7 +1354,15 @@ def custom_request(url: str, method: str, data: str = "", headers: str = "{}", s
     def go():
         client = _require_client(subdomain)
         hdrs = json.loads(headers) if headers else {}
-        resp = client.custom_request(url, method, data, hdrs)
+        request_url = url
+        parsed = urlparse(request_url)
+        if not parsed.scheme:
+            sub = _resolve_subdomain(subdomain)
+            if not sub:
+                raise RuntimeError("Cannot build absolute URL without a resolved subdomain.")
+            path = request_url if request_url.startswith("/") else f"/{request_url}"
+            request_url = f"https://{sub}.edupage.org{path}"
+        resp = client.custom_request(request_url, method, data, hdrs)
         return {"status_code": resp.status_code, "text": resp.text}
 
     return _run(go, "custom_request")
