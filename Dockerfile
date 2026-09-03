@@ -7,8 +7,8 @@ RUN adduser -D appuser
 COPY pyproject.toml README.md LICENSE ./
 COPY src/ ./src/
 
-RUN pip install --no-cache-dir --upgrade "pip>=26.2.0" "setuptools>=83.0.0" \
-    && pip install --no-cache-dir .
+RUN pip install --no-cache-dir --upgrade "pip>=26.2.0" "setuptools>=83.0.0" "wheel>=0.46.3" \
+    && pip install --no-cache-dir --no-build-isolation .
 
 EXPOSE 8000
 
