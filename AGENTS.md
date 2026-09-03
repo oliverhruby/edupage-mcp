@@ -79,6 +79,17 @@ logic. Do not grow a scraping layer here.
 - **JSON output.** Return plain JSON serialisable via `_serialize` (handles
   dataclasses, enums, `datetime`). Don't return raw `edupage-api` objects.
 
+## Git commit policy
+
+- Use **Conventional Commits** for every commit message.
+- Format: `<type>(<scope>): <description>` (scope optional when not useful).
+- Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
+  `build`, `ci`, `chore`, `revert`.
+- Keep the subject short and imperative (`add`, `fix`, `update`), with no
+  trailing period.
+- Before pushing, check recent history (`git log --oneline -10`) and rewrite
+  non-conforming local commit subjects to conventional format.
+
 ## Dependency pinning
 
 `pyproject.toml` pins `mcp<2`. Reason: `mcp 2.x` renamed `FastMCP` → `MCPServer`
