@@ -25,14 +25,17 @@ ordering), messages, rosters, parent child-switching and more — including
 - [Getting started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [1. Install](#1-install)
-  - [Quality gates (PRs)](#quality-gates-prs)
   - [2. Configure credentials](#2-configure-credentials)
   - [3. Register with your MCP client](#3-register-with-your-mcp-client)
-- [Usage examples](#usage-examples)
+- [Prompt examples](#prompt-examples)
 - [Multiple schools (subdomains)](#multiple-schools-subdomains)
 - [Tool reference](#tool-reference)
 - [Data & safety notes](#data--safety-notes)
-- [Architecture & implementation](#architecture--implementation)
+- [Developer guide](#developer-guide)
+  - [Architecture & implementation details](#architecture--implementation-details)
+  - [Releases](#releases)
+  - [Quality gates (PRs)](#quality-gates-prs)
+  - [Upstream coverage drift check](#upstream-coverage-drift-check)
 - [Limitations](#limitations)
 - [License](#license)
 
@@ -127,7 +130,14 @@ A single stdio MCP server exposing **44 tools** (published on PyPI as
 
 ### 1. Install
 
-**Option A — from PyPI (recommended):**
+If you are using an AI coding client, a simple prompt is often enough to get
+started, for example: "Install the EduPage MCP as described in this GitHub
+repository oliverhruby/edupage-mcp". Most MCP-capable clients can then guide
+you through the available setup options.
+
+**Option A — from PyPI (recommended)**
+
+Use this for normal usage with a released version.
 
 ```bash
 uvx edupage-mcp-full
@@ -135,11 +145,12 @@ uvx edupage-mcp-full
 pip install edupage-mcp-full
 ```
 
-`uvx` runs the package **without** installing it — this is the canonical way MCP
-servers are launched. `uv` is required for `uvx` (install with
-`pip install uv` or `winget install astral-sh.uv`).
+`uvx` runs the package without a persistent install. If `uvx` is unavailable,
+install `uv` first (`pip install uv` or `winget install astral-sh.uv`).
 
-**Option B — from GitHub (latest source):**
+**Option B — from GitHub (latest source)**
+
+Use this if you want the latest changes before a PyPI release.
 
 ```bash
 uvx --from "git+https://github.com/oliverhruby/edupage-mcp.git" edupage-mcp-full
@@ -147,7 +158,9 @@ uvx --from "git+https://github.com/oliverhruby/edupage-mcp.git" edupage-mcp-full
 pip install "git+https://github.com/oliverhruby/edupage-mcp.git"
 ```
 
-**Option C — development from source:**
+**Option C — development from source**
+
+Use this if you are contributing or debugging locally.
 
 ```bash
 git clone https://github.com/oliverhruby/edupage-mcp.git
@@ -156,37 +169,32 @@ uv sync               # or: python -m venv .venv && .venv/bin/python -m pip inst
 uv run edupage-mcp-full
 ```
 
+**Option D — Docker**
+
+Use this for an isolated container runtime.
+
+```bash
+docker build -t edupage-mcp-full .
+
+docker run --rm -i \
+  -e EDUPAGE_USERNAME=your_username \
+  -e EDUPAGE_PASSWORD=your_password \
+  edupage-mcp-full
+```
+
+The container uses the same environment variables described in
+[Configure credentials](#2-configure-credentials). It also includes a
+`HEALTHCHECK` (stdio process liveness by default; local TCP check in HTTP
+transport modes).
+
 > `pyproject.toml` pins `mcp<2` (the stable FastMCP v1 API). `mcp 2.x` renamed
 > `FastMCP` to `MCPServer` and changed the API surface; this server targets the
 > FastMCP v1 API for simplicity and stability.
 
-#### Releases
-
-New versions are published to PyPI automatically via GitHub Actions using
-**OpenID Connect trusted publishing** (no manual token). Pushing a tag such as
-`v0.1.0` triggers the `publish` workflow (see `.github/workflows/publish.yml`
-for the one-time PyPI registration). `version` in `pyproject.toml` must match
-the tag.
-
-#### Quality gates (PRs)
-
-Pull requests targeting `main` are gated by required GitHub checks:
-
-- `quality-gates / python-sanity` — compiles `src/edupage_mcp/__init__.py` and
-  verifies `pip install .` from source.
-- `quality-gates / docker-mcp-smoke` — builds the Docker image and performs a
-  real MCP stdio handshake (`initialize` + `tools/list`).
-- `security / pip-audit` — scans Python dependencies for known CVEs.
-- `container-security / trivy-image` — builds the Docker image and fails on
-  `HIGH`/`CRITICAL` vulnerabilities (with `ignore-unfixed: true`).
-
-If either check fails, the PR cannot be merged until it is fixed or explicitly
-handled.
-
 ### 2. Configure credentials
 
 Either set environment variables **or** pass credentials to `login` (see
-[Usage](#usage-examples)).
+[Prompt examples](#prompt-examples)).
 
 ```bash
 # Windows (persistent, per-user)
@@ -238,94 +246,20 @@ logs into all of them on startup with your shared credentials.
 
 After editing client config, **restart the client** so the MCP server is loaded.
 
-### 4. Run with Docker
-
-The project includes an Alpine-based Docker image for containerized deployment.
-
-#### Build the image
-
-```bash
-docker build -t edupage-mcp-full .
-```
-
-#### Run the container (stdio)
-
-The server communicates over stdio and expects to be connected to an MCP client.
-
-```bash
-docker run --rm -i \
-  -e EDUPAGE_USERNAME=your_username \
-  -e EDUPAGE_PASSWORD=your_password \
-  edupage-mcp-full
-```
-
-#### Environment variables
-
-All existing environment variables are supported:
-
-- `EDUPAGE_USERNAME`: EduPage username/email
-- `EDUPAGE_PASSWORD`: EduPage password
-- `EDUPAGE_SUBDOMAINS`: Comma-separated subdomains for multi-school auto-login (optional)
-- `EDUPAGE_OTP_SECRET`: TOTP secret for 2FA-enabled accounts (optional)
-
-The image includes a `HEALTHCHECK`:
-
-- In `stdio` mode (default): healthy when the process is running.
-- In HTTP transports: healthy when a local TCP connection to `MCP_PORT` succeeds.
-
 ---
 
-## Usage examples
+## Prompt examples
 
-```text
-# Check the MCP is alive and see which schools are logged in
-auth_status
-
-# Log in (uses env vars, or pass explicit args)
-login
-
-# If 2FA is enabled:
-two_factor_check_confirmed        # approve on device -> True
-two_factor_finish                 # then finish
-
-# Your own timetable for today
-get_my_timetable
-
-# Timetable for a specific class on a date
-get_timetable target_type="class" target_id="9.A" date_str="2026-09-10"
-
-# Next week's timetable
-get_next_week_timetable
-
-# Grades (all, or for a term/year)
-get_grades
-get_grades term="FIRST" year=2026
-
-# Substitutions / changes for today
-get_timetable_changes
-
-# Meal menu and order lunch (option #2)
-get_meals
-choose_meal date_str="2026-09-10" meal_type="lunch" number=2
-
-# Who is in the school + send a message to a teacher
-get_teachers
-send_message recipient_id="Teacher456" body="Hello!"
-
-# Parent account: see students, then switch to one
-get_my_students
-switch_to_student student_id=123
-get_my_timetable
-switch_to_parent
-
-# Students by NAME — auto-discovered across all logged-in schools
-# (works even when Viktor and Tamara are at different schools / Tamara at two)
-find_student name="Viktor"
-get_student_timetable name="Viktor"
-get_student_timetable name="Viktor" date_str="2026-09-10"
-get_student_timetable name="Tamara"   # returns one result per school where found
-scan_students                         # list every student at every school
-```
+| User prompt | Likely tool call(s) | Expected response |
+|---|---|---|
+| "Are we connected and logged in?" | `auth_status` | Connected status, active school/subdomain, and login state per school. |
+| "What classes do I have today?" | `get_my_timetable` | A short timetable summary for today. |
+| "Show me the 9.A schedule for 2026-09-10" | `get_timetable target_type="class" target_id="9.A" date_str="2026-09-10"` | Class timetable for that date. |
+| "What grades do I have this term?" | `get_grades term="FIRST" year=2026` | Subject-by-subject grade overview for the selected term/year. |
+| "Any substitutions today?" | `get_timetable_changes` | Changes, cancellations, and replacements for today. |
+| "What is for lunch and order option 2 for tomorrow" | `get_meals` → `choose_meal date_str="2026-09-10" meal_type="lunch" number=2` | Meal menu and order confirmation (or a clear error if unavailable). |
+| "Find Viktor's timetable for tomorrow" | `get_student_timetable name="Viktor" date_str="2026-09-10"` | Viktor's timetable; if found in multiple schools, one result per school. |
+| "List teachers and send a hello to Teacher456" | `get_teachers` → `send_message recipient_id="Teacher456" body="Hello!"` | Teacher list plus message sent confirmation. |
 
 ---
 
@@ -463,7 +397,12 @@ fully automatic.
 
 ---
 
-## Architecture & implementation
+## Developer guide
+
+Contributor and maintainer information starts here. If you only want to run the
+server, you can stop after the user sections above.
+
+### Architecture & implementation details
 
 ### High-level design
 
@@ -562,6 +501,48 @@ The server uses Python-only deps and is pinned to `mcp<2`. Both `uvx` and the
 `pip install -e .` dev path keep the package isolated from any unrelated global
 `mcp` (e.g. a newer v2.x) install, because each runs in its own environment —
 see [Install](#1-install).
+
+### Releases
+
+New versions are published to PyPI automatically via GitHub Actions using
+**OpenID Connect trusted publishing** (no manual token). Pushing a tag such as
+`v0.1.0` triggers the `publish` workflow (see `.github/workflows/publish.yml`
+for the one-time PyPI registration). `version` in `pyproject.toml` must match
+the tag.
+
+### Quality gates (PRs)
+
+Pull requests targeting `main` are gated by required GitHub checks:
+
+- `quality-gates / python-sanity` — compiles `src/edupage_mcp/__init__.py` and
+  verifies `pip install .` from source.
+- `quality-gates / docker-mcp-smoke` — builds the Docker image and performs a
+  real MCP stdio handshake (`initialize` + `tools/list`).
+- `security / pip-audit` — scans Python dependencies for known CVEs.
+- `container-security / trivy-image` — enforces a vulnerability gate on
+  `HIGH`/`CRITICAL` findings while still uploading full-severity SARIF results
+  to GitHub Security.
+
+If a required check fails, the PR cannot be merged until it is fixed or
+explicitly handled.
+
+### Upstream coverage drift check
+
+To keep the wrapper aligned with `edupage-api`, CI runs
+`.github/workflows/upstream-coverage.yml` and verifies that every public
+`Edupage` method is either:
+
+- covered by MCP wrapper calls in `src/edupage_mcp/__init__.py`, or
+- explicitly listed in `scripts/edupage_api_ignored_methods.json` with a reason.
+
+Local run:
+
+```bash
+python scripts/check_edupage_api_coverage.py
+```
+
+If upstream adds a method, this check fails until you either implement support
+or intentionally document why it is ignored.
 
 ---
 

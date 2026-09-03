@@ -1,0 +1,8 @@
+{
+  "extra_covered_methods": [
+    "from_session_id"
+  ],
+  "ignored_methods": {
+    "cloud_upload": "Not exposed as an MCP tool yet; low demand and would require additional schema for file payloads."
+  }
+}

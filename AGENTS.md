@@ -123,13 +123,18 @@ and changed the API. We target the FastMCP v1 API. Keep `mcp<2`. Bump
   the Docker image and scans for vulnerabilities on every push/PR to main and
   weekly. The job fails on `HIGH`/`CRITICAL` findings (`ignore-unfixed: true`).
   Use `.trivyignore` only for temporary, documented exceptions.
+- **Upstream coverage drift** (`.github/workflows/upstream-coverage.yml`):
+  checks that public `edupage-api` `Edupage` methods are covered by wrapper calls
+  or explicitly ignored in `scripts/edupage_api_ignored_methods.json` with a
+  reason. Also runs a scheduled canary against the latest `edupage-api`.
 
-`main` branch protection requires both checks:
+`main` branch protection requires these checks:
 
 - `quality-gates / python-sanity`
 - `quality-gates / docker-mcp-smoke`
 - `security / pip-audit`
 - `container-security / trivy-image`
+- `upstream-coverage / coverage-drift`
 
 Local check:
 
@@ -143,6 +148,7 @@ To run any workflow manually from `gh`:
 gh workflow run security.yml --repo oliverhruby/edupage-mcp
 gh workflow run quality-gates.yml --repo oliverhruby/edupage-mcp
 gh workflow run container-security.yml --repo oliverhruby/edupage-mcp
+gh workflow run upstream-coverage.yml --repo oliverhruby/edupage-mcp
 ```
 
 ## Build / verify
