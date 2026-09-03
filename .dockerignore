@@ -39,7 +39,7 @@ venv
 *~
 
 # Test and coverage
-pytest_cache
+.pytest_cache
 htmlcov
 .coverage
 .coverage.*
