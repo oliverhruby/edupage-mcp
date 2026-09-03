@@ -1,0 +1,7 @@
+# Add accepted findings as one ID per line, for example:
+# CVE-2024-12345
+# GHSA-xxxx-yyyy-zzzz
+#
+# Keep this file minimal and temporary:
+# - include a link to tracking issue in PR text
+# - set a target removal date
