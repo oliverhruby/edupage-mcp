@@ -47,6 +47,17 @@ EDUPAGE_PASSWORD = os.environ.get("EDUPAGE_PASSWORD", "")
 # Comma-separated list of schools to auto-login on startup (multi-school + automatic
 # student discovery across all of them).
 EDUPAGE_SUBDOMAINS = os.environ.get("EDUPAGE_SUBDOMAINS", "")
+MCP_TRANSPORT = os.environ.get("MCP_TRANSPORT", "stdio")
+MCP_HOST = os.environ.get("MCP_HOST", "127.0.0.1")
+_MCP_PORT_RAW = os.environ.get("MCP_PORT", "8000")
+_MCP_PORT_ERROR = None
+try:
+    MCP_PORT = int(_MCP_PORT_RAW)
+    if MCP_PORT <= 0 or MCP_PORT > 65535:
+        raise ValueError
+except ValueError:
+    MCP_PORT = 8000
+    _MCP_PORT_ERROR = f"Error: invalid MCP_PORT '{_MCP_PORT_RAW}'. Expected an integer between 1 and 65535."
 
 # Multiple-school support: one Edupage() session per subdomain.
 _clients = {}          # subdomain -> Edupage
@@ -238,7 +249,7 @@ def _to_text(data) -> dict:
 # helper indirection so FastMCP is optional (tests can call these directly)
 # --------------------------------------------------------------------------
 if FastMCP:
-    server = FastMCP("edupage")
+    server = FastMCP("edupage", host=MCP_HOST, port=MCP_PORT)
 else:
     server = None
 
@@ -1365,6 +1376,9 @@ def custom_request(url: str, method: str, data: str = "", headers: str = "{}", s
 def main():
     if server is None:
         raise SystemExit("The 'mcp' python package is not installed.")
+    if _MCP_PORT_ERROR:
+        sys.stderr.write(f"{_MCP_PORT_ERROR}\n")
+        raise SystemExit(1)
     if not _clients and EDUPAGE_USERNAME and EDUPAGE_PASSWORD:
         if EDUPAGE_SUBDOMAINS:
             subs = [s.strip() for s in EDUPAGE_SUBDOMAINS.split(",") if s.strip()]
@@ -1372,7 +1386,14 @@ def main():
                 _autologin(subs)
         else:
             _autodiscover()
-    server.run()
+    transport = MCP_TRANSPORT.strip().lower()
+    allowed = {"stdio", "sse", "streamable-http"}
+    if transport not in allowed:
+        sys.stderr.write(
+            f"Error: invalid MCP_TRANSPORT '{MCP_TRANSPORT}'. Expected one of: {', '.join(sorted(allowed))}.\n"
+        )
+        raise SystemExit(1)
+    server.run(transport=transport)
 
 
 def _autodiscover():

@@ -187,6 +187,12 @@ The container uses the same environment variables described in
 `HEALTHCHECK` (stdio process liveness by default; local TCP check in HTTP
 transport modes).
 
+For HTTP transports, set optional runtime vars:
+
+- `MCP_TRANSPORT`: `stdio` (default), `sse`, or `streamable-http`
+- `MCP_HOST`: bind host (default `127.0.0.1`)
+- `MCP_PORT`: bind port (default `8000`)
+
 > `pyproject.toml` pins `mcp<2` (the stable FastMCP v1 API). `mcp 2.x` renamed
 > `FastMCP` to `MCPServer` and changed the API surface; this server targets the
 > FastMCP v1 API for simplicity and stability.
