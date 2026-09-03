@@ -35,6 +35,7 @@ ordering), messages, rosters, parent child-switching and more — including
   - [Architecture & implementation details](#architecture--implementation-details)
   - [Releases](#releases)
   - [Quality gates (PRs)](#quality-gates-prs)
+  - [Upstream coverage drift check](#upstream-coverage-drift-check)
 - [Limitations](#limitations)
 - [License](#license)
 
@@ -519,6 +520,24 @@ Pull requests targeting `main` are gated by required GitHub checks:
 
 If a required check fails, the PR cannot be merged until it is fixed or
 explicitly handled.
+
+### Upstream coverage drift check
+
+To keep the wrapper aligned with `edupage-api`, CI runs
+`.github/workflows/upstream-coverage.yml` and verifies that every public
+`Edupage` method is either:
+
+- covered by MCP wrapper calls in `src/edupage_mcp/__init__.py`, or
+- explicitly listed in `scripts/edupage_api_ignored_methods.json` with a reason.
+
+Local run:
+
+```bash
+python scripts/check_edupage_api_coverage.py
+```
+
+If upstream adds a method, this check fails until you either implement support
+or intentionally document why it is ignored.
 
 ---
 
