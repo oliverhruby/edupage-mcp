@@ -40,10 +40,12 @@ from edupage_api.timetables import Lesson, Timetable
 try:
     from mcp.server.fastmcp import FastMCP
     from mcp.server.auth.provider import AccessToken, TokenVerifier
+    from mcp.server.auth.settings import AuthSettings
 except Exception:
     FastMCP = None
     AccessToken = None
     TokenVerifier = None
+    AuthSettings = None
 
 EDUPAGE_USERNAME = os.environ.get("EDUPAGE_USERNAME", "")
 EDUPAGE_PASSWORD = os.environ.get("EDUPAGE_PASSWORD", "")
@@ -266,9 +268,22 @@ class _StaticApiKeyTokenVerifier:
 
 if FastMCP:
     token_verifier = None
+    auth_settings = None
     if MCP_API_KEY:
         token_verifier = _StaticApiKeyTokenVerifier(MCP_API_KEY)
-    server = FastMCP("edupage", host=MCP_HOST, port=MCP_PORT, token_verifier=token_verifier)
+        # FastMCP requires explicit auth settings whenever a token verifier is used.
+        auth_settings = AuthSettings(
+            issuer_url=f"http://{MCP_HOST}:{MCP_PORT}",
+            resource_server_url=f"http://{MCP_HOST}:{MCP_PORT}",
+            required_scopes=["mcp"],
+        )
+    server = FastMCP(
+        "edupage",
+        host=MCP_HOST,
+        port=MCP_PORT,
+        auth=auth_settings,
+        token_verifier=token_verifier,
+    )
 else:
     server = None
 

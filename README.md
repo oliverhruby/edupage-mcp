@@ -1,4 +1,4 @@
-# edupage-mcp-full
+# edupage-mcp
 
 A Model Context Protocol (MCP) server that exposes the full functionality of the
 [`edupage-api`](https://github.com/EdupageAPI/edupage-api) Python library to AI
@@ -33,6 +33,7 @@ ordering), messages, rosters, parent child-switching and more — including
 - [Data & safety notes](#data--safety-notes)
 - [Contributing](#contributing)
 - [Limitations](#limitations)
+- [Support](#support)
 - [License](#license)
 
 ---
@@ -446,6 +447,15 @@ Contributor and maintainer guidance is in `CONTRIBUTING.md`.
   schools (via `EDUPAGE_SUBDOMAINS`, `login_all`, or repeated `login` calls).
   If a school is not logged in, that student's results from that school cannot
   be discovered.
+
+---
+
+## Support
+
+If you like this project and want to support or request a feature, send me a
+beer, it keeps my mind relaxed and ideas will come :-)
+
+[![Support via PayPal](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.me/oliverhruby/)
 
 ---
 
