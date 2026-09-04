@@ -29,7 +29,7 @@ python -m edupage_mcp
 
 ### High-level design
 
-```text
+```
 MCP client (opencode / Claude / Cursor ...)
         |  stdio JSON-RPC
         v
@@ -113,3 +113,56 @@ Run locally:
 ```bash
 python scripts/check_edupage_api_coverage.py
 ```
+
+## Conventional Commits
+
+All commit messages should follow the Conventional Commits specification
+(<https://conventionalcommits.org/>).  The format is:
+
+```
+<type>(<scope>): <short description>
+```
+
+**Types**
+
+- `feat` – new feature (e.g. a new tool, a new API endpoint)
+- `fix` – bug fix or regression
+- `docs` – documentation only
+- `refactor` – code change that neither adds nor fixes a bug
+- `perf` – performance improvement
+- `test` – adding or fixing tests
+- `chore` – routine maintenance (bump version, config)
+- `style` – formatting, missing semi‑colons, etc.
+- `build` – CI/CD changes, dependency updates
+- `revert` – revert a previous commit
+
+**Example messages**
+
+```
+feat(timetable_range): add get_timetable_range wrapper
+fix: typo in README upgrade section
+docs: update README with upgrade instructions
+refactor: move _parse_date helper to shared module
+```
+
+If a change is breaking, add a footer:
+
+```
+BREAKING CHANGE: the `get_timetable_range` function now requires a `subdomain` argument.
+```
+
+**Why we use it**
+
+- The GitHub Actions workflow that generates release notes splits commits into
+  *Added*, *Changes* and *Upgrade* based on the commit type.
+- It also makes auto‑generated `CHANGELOG.md` files possible.
+
+**How to add a commit**
+
+1.  Choose the appropriate `<type>`.
+2.  Optionally add a `<scope>` that describes the area affected
+    (e.g. `timetable`, `timetable_range`, `meals`, `messages`, `mcp`, `pyproject`,
+    `readme`).
+3.  Write a short, imperative description (present tense, no period).
+4.  Add a body (optional) for motivation or details.
+5.  Add a footer (optional) for breaking changes or co‑authors.
