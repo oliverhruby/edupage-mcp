@@ -66,11 +66,8 @@ This project deliberately goes further:
 | Portal login (`login_auto`) | ✅ | ❌ | ✅ |
 | Next ringing time / bell schedule | ❌ | ❌ | ✅ |
 | Raw session **custom request** | ❌ | ❌ | ✅ |
-| **Multiple schools** in one session | ❌ | ❌ | ✅ |
-| **Automatic multi-school login** (env-based) | ❌ | ❌ | ✅ |
-| **Cross-school student discovery** (no mapping needed) | ❌ | ❌ | ✅ |
+| **Multiple schools** (auto-login + discovery) | ❌ | ❌ | ✅ |
 | **Role-aware** (parent / student / teacher) | ❌ | ❌ | ✅ |
-| **OIDC trusted publishing** (no PyPI token) | ❌ | ❌ | ✅ |
 
 **Key differentiators:**
 
@@ -85,8 +82,6 @@ This project deliberately goes further:
   students. No tool duplication.
 - **Full write surface.** Meal ordering/rating, message sending, student switching
   — the other servers don't cover these.
-- **OIDC publishing.** No PyPI token to manage. Push a tag and GitHub Actions
-  publishes via OIDC trusted publishing.
 
 ---
 
@@ -119,11 +114,7 @@ A single stdio MCP server exposing **44 tools** (published on PyPI as
 
 ## Getting started
 
-### Prerequisites
-
-- Python **3.10+** (Python 3.14 on Windows is verified)
-- A [GitHub](https://github.com) account only if you want the repo; not needed to run.
-- An MCP-capable client (opencode, Claude Desktop, Cursor, etc.)
+You need an MCP-capable client (opencode, Claude Desktop, Cursor, etc.).
 
 ### 1. Install
 
@@ -135,6 +126,8 @@ you through the available setup options.
 **Option A — from PyPI (recommended)**
 
 Use this for normal usage with a released version.
+
+Requirements: `uv` for `uvx`, or Python **3.10+** for `pip`.
 
 ```bash
 uvx edupage-mcp-full
@@ -149,6 +142,8 @@ install `uv` first (`pip install uv` or `winget install astral-sh.uv`).
 
 Use this if you want the latest changes before a PyPI release.
 
+Requirements: `uv` for `uvx`, or Python **3.10+** for `pip`.
+
 ```bash
 uvx --from "git+https://github.com/oliverhruby/edupage-mcp.git" edupage-mcp-full
 # or
@@ -158,6 +153,8 @@ pip install "git+https://github.com/oliverhruby/edupage-mcp.git"
 **Option C — development from source**
 
 Use this if you are contributing or debugging locally.
+
+Requirements: Python **3.10+**.
 
 ```bash
 git clone https://github.com/oliverhruby/edupage-mcp.git
@@ -169,6 +166,8 @@ uv run edupage-mcp-full
 **Option D — Docker**
 
 Use this for an isolated container runtime.
+
+Requirements: Docker.
 
 Pull a prebuilt image (recommended):
 
@@ -423,7 +422,7 @@ fully automatic.
 
 ## Contributing
 
-Contributor and maintainer guidance is in `CONTRIBUTING.md`.
+Contributor and maintainer guidance is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 - Contribution workflow and local setup
 - Architecture and implementation details
