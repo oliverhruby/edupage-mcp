@@ -1,4 +1,4 @@
-# edupage-mcp-full
+# edupage-mcp
 
 A Model Context Protocol (MCP) server that exposes the full functionality of the
 [`edupage-api`](https://github.com/EdupageAPI/edupage-api) Python library to AI
