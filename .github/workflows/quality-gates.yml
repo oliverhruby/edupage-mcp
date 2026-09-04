@@ -142,6 +142,8 @@ jobs:
                       "18000:8000",
                       "-e",
                       "MCP_TRANSPORT=streamable-http",
+                      "-e",
+                      "MCP_HOST=0.0.0.0",
                       IMAGE,
                   ]
               )
@@ -161,6 +163,8 @@ jobs:
                       "18000:8000",
                       "-e",
                       "MCP_TRANSPORT=streamable-http",
+                      "-e",
+                      "MCP_HOST=0.0.0.0",
                       "-e",
                       "MCP_API_KEY=ci-test-key",
                       IMAGE,
