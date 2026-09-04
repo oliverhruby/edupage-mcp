@@ -74,7 +74,9 @@ jobs:
           import urllib.request
 
           IMAGE = "edupage-mcp:ci"
-          URL_CANDIDATES = ["http://127.0.0.1:18000/mcp", "http://127.0.0.1:18000/"]
+
+          def url_candidates(port: int):
+              return [f"http://127.0.0.1:{port}/mcp", f"http://127.0.0.1:{port}/"]
 
           def run_cmd(args):
               subprocess.run(args, check=True)
@@ -103,11 +105,11 @@ jobs:
               except urllib.error.HTTPError as e:
                   return e.code
 
-          def probe_status(headers=None, timeout: float = 25.0) -> int:
+          def probe_status(headers=None, timeout: float = 25.0, port: int = 18000) -> int:
               start = time.time()
               last_exc = None
               while time.time() - start < timeout:
-                  for url in URL_CANDIDATES:
+                  for url in url_candidates(port):
                       try:
                           code = request_status(url, headers=headers)
                           if code != 404:
@@ -119,13 +121,13 @@ jobs:
                   raise last_exc
               raise RuntimeError("Timed out probing HTTP MCP endpoint")
 
-          def expect_authorized(headers=None):
-              code = probe_status(headers=headers)
+          def expect_authorized(headers=None, port: int = 18000):
+              code = probe_status(headers=headers, port=port)
               if code in (401, 403):
                   raise RuntimeError(f"Expected authorized/non-auth response, got HTTP {code}")
 
-          def expect_unauthorized(headers=None):
-              code = probe_status(headers=headers)
+          def expect_unauthorized(headers=None, port: int = 18000):
+              code = probe_status(headers=headers, port=port)
               if code not in (401, 403):
                   raise RuntimeError(f"Expected HTTP 401/403, got HTTP {code}")
 
@@ -148,7 +150,7 @@ jobs:
                   ]
               )
               wait_for_port(18000)
-              expect_authorized()
+              expect_authorized(port=18000)
               cleanup("edupage-http-noauth")
 
               cleanup("edupage-http-auth")
@@ -160,7 +162,7 @@ jobs:
                       "--name",
                       "edupage-http-auth",
                       "-p",
-                      "18000:8000",
+                      "18001:8000",
                       "-e",
                       "MCP_TRANSPORT=streamable-http",
                       "-e",
@@ -170,10 +172,10 @@ jobs:
                       IMAGE,
                   ]
               )
-              wait_for_port(18000)
-              expect_unauthorized()
-              expect_unauthorized(headers={"Authorization": "Bearer wrong-key"})
-              expect_authorized(headers={"Authorization": "Bearer ci-test-key"})
+              wait_for_port(18001)
+              expect_unauthorized(port=18001)
+              expect_unauthorized(headers={"Authorization": "Bearer wrong-key"}, port=18001)
+              expect_authorized(headers={"Authorization": "Bearer ci-test-key"}, port=18001)
           finally:
               cleanup("edupage-http-noauth")
               cleanup("edupage-http-auth")
