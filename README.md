@@ -455,6 +455,8 @@ Contributor and maintainer guidance is in `CONTRIBUTING.md`.
 If you like this project and want to support or request a feature, send me a
 beer, it keeps my mind relaxed and ideas will come :-)
 
+[![Support via PayPal](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.me/oliverhruby/)
+
 ---
 
 ## License
