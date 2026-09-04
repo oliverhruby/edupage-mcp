@@ -16,6 +16,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Verify tag matches package version
+        run: python scripts/check_tag_matches_version.py
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

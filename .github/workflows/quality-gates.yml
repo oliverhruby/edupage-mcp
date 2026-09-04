@@ -63,3 +63,116 @@ jobs:
 
           asyncio.run(main())
           PY
+
+      - name: HTTP auth mode smoke
+        run: |
+          python - <<'PY'
+          import asyncio
+          import socket
+          import subprocess
+          import time
+
+          from mcp import ClientSession
+          from mcp.client.streamable_http import streamablehttp_client
+
+          IMAGE = "edupage-mcp:ci"
+          URL_CANDIDATES = [
+              "http://127.0.0.1:18000/mcp",
+              "http://127.0.0.1:18000/",
+          ]
+
+          def run_cmd(args):
+              subprocess.run(args, check=True)
+
+          def cleanup(name: str):
+              subprocess.run(["docker", "rm", "-f", name], check=False)
+
+          def wait_for_port(port: int, timeout: float = 20.0):
+              start = time.time()
+              while time.time() - start < timeout:
+                  with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                      sock.settimeout(0.5)
+                      if sock.connect_ex(("127.0.0.1", port)) == 0:
+                          return
+                  time.sleep(0.2)
+              raise RuntimeError(f"Timed out waiting for 127.0.0.1:{port}")
+
+          async def try_list_tools(headers=None):
+              last_exc = None
+              for url in URL_CANDIDATES:
+                  try:
+                      async with streamablehttp_client(url, headers=headers) as (
+                          read_stream,
+                          write_stream,
+                          _,
+                      ):
+                          async with ClientSession(read_stream, write_stream) as session:
+                              await session.initialize()
+                              tools = await session.list_tools()
+                              items = getattr(tools, "tools", []) or []
+                              return len(items)
+                  except Exception as exc:  # noqa: BLE001
+                      last_exc = exc
+              if last_exc is None:
+                  raise RuntimeError("No URL candidates configured")
+              raise last_exc
+
+          async def expect_success(headers=None):
+              count = await try_list_tools(headers=headers)
+              if count < 40:
+                  raise RuntimeError(f"Expected >=40 tools, got {count}")
+
+          async def expect_failure(headers=None):
+              try:
+                  await try_list_tools(headers=headers)
+              except Exception:
+                  return
+              raise RuntimeError("Expected auth failure, but request succeeded")
+
+          try:
+              cleanup("edupage-http-noauth")
+              run_cmd(
+                  [
+                      "docker",
+                      "run",
+                      "-d",
+                      "--name",
+                      "edupage-http-noauth",
+                      "-p",
+                      "18000:8000",
+                      "-e",
+                      "MCP_TRANSPORT=streamable-http",
+                      IMAGE,
+                  ]
+              )
+              wait_for_port(18000)
+              asyncio.run(expect_success())
+              cleanup("edupage-http-noauth")
+
+              cleanup("edupage-http-auth")
+              run_cmd(
+                  [
+                      "docker",
+                      "run",
+                      "-d",
+                      "--name",
+                      "edupage-http-auth",
+                      "-p",
+                      "18000:8000",
+                      "-e",
+                      "MCP_TRANSPORT=streamable-http",
+                      "-e",
+                      "MCP_API_KEY=ci-test-key",
+                      IMAGE,
+                  ]
+              )
+              wait_for_port(18000)
+              asyncio.run(expect_failure())
+              asyncio.run(expect_failure(headers={"Authorization": "Bearer wrong-key"}))
+              asyncio.run(expect_success(headers={"Authorization": "Bearer ci-test-key"}))
+          finally:
+              cleanup("edupage-http-noauth")
+              cleanup("edupage-http-auth")
+
+          print("HTTP auth smoke OK")
+          PY
