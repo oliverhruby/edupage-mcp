@@ -1,6 +1,6 @@
 # edupage-mcp
 
-[![PyPI version](https://img.shields.io/pypi/v/edupage-mcp-full.svg)](https://pypi.org/project/edupage-mcp-full/)
+[![GitHub release](https://img.shields.io/github/v/release/oliverhruby/edupage-mcp.svg?label=release)](https://github.com/oliverhruby/edupage-mcp/releases)
 [![Downloads](https://img.shields.io/pypi/dm/edupage-mcp-full.svg)](https://pypi.org/project/edupage-mcp-full/)
 [![Quality gates](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/quality-gates.yml.svg?label=quality%20gates)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/quality-gates.yml)
 [![Security](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/security.yml.svg?label=security)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/security.yml)
