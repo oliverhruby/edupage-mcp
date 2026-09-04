@@ -33,6 +33,7 @@ ordering), messages, rosters, parent child-switching and more — including
 - [Data & safety notes](#data--safety-notes)
 - [Contributing](#contributing)
 - [Limitations](#limitations)
+- [Support](#support)
 - [License](#license)
 
 ---
@@ -446,6 +447,13 @@ Contributor and maintainer guidance is in `CONTRIBUTING.md`.
   schools (via `EDUPAGE_SUBDOMAINS`, `login_all`, or repeated `login` calls).
   If a school is not logged in, that student's results from that school cannot
   be discovered.
+
+---
+
+## Support
+
+If you like this project and want to support or request a feature, send me a
+beer, it keeps my mind relaxed and ideas will come :-)
 
 ---
 
