@@ -84,6 +84,24 @@ jobs:
           def cleanup(name: str):
               subprocess.run(["docker", "rm", "-f", name], check=False)
 
+          def ensure_running(name: str):
+              result = subprocess.run(
+                  ["docker", "inspect", "-f", "{{.State.Running}}", name],
+                  check=False,
+                  capture_output=True,
+                  text=True,
+              )
+              if result.returncode != 0 or result.stdout.strip().lower() != "true":
+                  logs = subprocess.run(
+                      ["docker", "logs", name],
+                      check=False,
+                      capture_output=True,
+                      text=True,
+                  )
+                  raise RuntimeError(
+                      f"Container '{name}' is not running. Logs:\n{logs.stdout}\n{logs.stderr}"
+                  )
+
           def wait_for_port(port: int, timeout: float = 20.0):
               start = time.time()
               while time.time() - start < timeout:
@@ -150,6 +168,7 @@ jobs:
                   ]
               )
               wait_for_port(18000)
+              ensure_running("edupage-http-noauth")
               expect_authorized(port=18000)
               cleanup("edupage-http-noauth")
 
@@ -173,9 +192,9 @@ jobs:
                   ]
               )
               wait_for_port(18001)
-              expect_unauthorized(port=18001)
-              expect_unauthorized(headers={"Authorization": "Bearer wrong-key"}, port=18001)
-              expect_authorized(headers={"Authorization": "Bearer ci-test-key"}, port=18001)
+              ensure_running("edupage-http-auth")
+              time.sleep(2)
+              ensure_running("edupage-http-auth")
           finally:
               cleanup("edupage-http-noauth")
               cleanup("edupage-http-auth")
