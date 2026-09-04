@@ -40,10 +40,12 @@ from edupage_api.timetables import Lesson, Timetable
 try:
     from mcp.server.fastmcp import FastMCP
     from mcp.server.auth.provider import AccessToken, TokenVerifier
+    from mcp.server.auth.settings import AuthSettings
 except Exception:
     FastMCP = None
     AccessToken = None
     TokenVerifier = None
+    AuthSettings = None
 
 EDUPAGE_USERNAME = os.environ.get("EDUPAGE_USERNAME", "")
 EDUPAGE_PASSWORD = os.environ.get("EDUPAGE_PASSWORD", "")
@@ -52,11 +54,6 @@ EDUPAGE_PASSWORD = os.environ.get("EDUPAGE_PASSWORD", "")
 EDUPAGE_SUBDOMAINS = os.environ.get("EDUPAGE_SUBDOMAINS", "")
 MCP_TRANSPORT = os.environ.get("MCP_TRANSPORT", "stdio")
 MCP_HOST = os.environ.get("MCP_HOST", "127.0.0.1")
-try:
-    MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
-except ValueError:
-    MCP_PORT = 8000
-MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
 _MCP_PORT_RAW = os.environ.get("MCP_PORT", "8000")
 MCP_API_KEY = os.environ.get("MCP_API_KEY", "")
 _MCP_PORT_ERROR = None
@@ -270,11 +267,14 @@ class _StaticApiKeyTokenVerifier:
 
 
 if FastMCP:
-    server = FastMCP("edupage", host=MCP_HOST, port=MCP_PORT)
-    token_verifier = None
+    server_kwargs = {"host": MCP_HOST, "port": MCP_PORT}
     if MCP_API_KEY:
-        token_verifier = _StaticApiKeyTokenVerifier(MCP_API_KEY)
-    server = FastMCP("edupage", host=MCP_HOST, port=MCP_PORT, token_verifier=token_verifier)
+        server_kwargs["auth"] = AuthSettings(
+            issuer_url=f"http://{MCP_HOST}:{MCP_PORT}",
+            resource_server_url=f"http://{MCP_HOST}:{MCP_PORT}",
+        )
+        server_kwargs["token_verifier"] = _StaticApiKeyTokenVerifier(MCP_API_KEY)
+    server = FastMCP("edupage", **server_kwargs)
 else:
     server = None
 
