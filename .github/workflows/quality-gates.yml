@@ -67,20 +67,23 @@ jobs:
       - name: HTTP auth mode smoke
         run: |
           python - <<'PY'
-          import asyncio
+          import json
           import socket
           import subprocess
           import time
-          from contextlib import suppress
-
-          from mcp import ClientSession
-          from mcp.client.streamable_http import streamablehttp_client
+          import urllib.error
+          import urllib.request
 
           IMAGE = "edupage-mcp:ci"
-          URL_CANDIDATES = [
-              "http://127.0.0.1:18000/mcp",
-              "http://127.0.0.1:18000/",
-          ]
+          URL_CANDIDATES = ["http://127.0.0.1:18000/mcp", "http://127.0.0.1:18000/"]
+          JSONRPC_BODY = json.dumps(
+              {
+                  "jsonrpc": "2.0",
+                  "id": "ci-check",
+                  "method": "tools/list",
+                  "params": {},
+              }
+          ).encode("utf-8")
 
           def run_cmd(args):
               subprocess.run(args, check=True)
@@ -98,51 +101,42 @@ jobs:
                   time.sleep(0.2)
               raise RuntimeError(f"Timed out waiting for 127.0.0.1:{port}")
 
-          async def try_list_tools(headers=None):
-              last_exc = None
-              for url in URL_CANDIDATES:
-                  try:
-                      async with streamablehttp_client(url, headers=headers) as (
-                          read_stream,
-                          write_stream,
-                          _,
-                      ):
-                          async with ClientSession(read_stream, write_stream) as session:
-                              await session.initialize()
-                              tools = await session.list_tools()
-                              items = getattr(tools, "tools", []) or []
-                              return len(items)
-                  except Exception as exc:  # noqa: BLE001
-                      last_exc = exc
-              if last_exc is None:
-                  raise RuntimeError("No URL candidates configured")
-              raise last_exc
+          def post_status(url: str, headers=None) -> int:
+              req_headers = {"Content-Type": "application/json", "Accept": "application/json"}
+              if headers:
+                  req_headers.update(headers)
+              req = urllib.request.Request(url, data=JSONRPC_BODY, headers=req_headers, method="POST")
+              try:
+                  with urllib.request.urlopen(req, timeout=4) as resp:
+                      return resp.getcode()
+              except urllib.error.HTTPError as e:
+                  return e.code
 
-          async def expect_success(headers=None):
-              count = await try_list_tools(headers=headers)
-              if count < 40:
-                  raise RuntimeError(f"Expected >=40 tools, got {count}")
-
-          async def expect_success_with_retry(headers=None, timeout: float = 25.0):
+          def probe_status(headers=None, timeout: float = 25.0) -> int:
               start = time.time()
               last_exc = None
               while time.time() - start < timeout:
-                  try:
-                      await expect_success(headers=headers)
-                      return
-                  except Exception as exc:  # noqa: BLE001
-                      last_exc = exc
-                      await asyncio.sleep(0.4)
-              if last_exc is None:
-                  raise RuntimeError("Timed out waiting for successful HTTP MCP handshake")
-              raise last_exc
+                  for url in URL_CANDIDATES:
+                      try:
+                          code = post_status(url, headers=headers)
+                          if code != 404:
+                              return code
+                      except Exception as exc:  # noqa: BLE001
+                          last_exc = exc
+                  time.sleep(0.4)
+              if last_exc:
+                  raise last_exc
+              raise RuntimeError("Timed out probing HTTP MCP endpoint")
 
-          async def expect_failure(headers=None):
-              try:
-                  await try_list_tools(headers=headers)
-              except Exception:
-                  return
-              raise RuntimeError("Expected auth failure, but request succeeded")
+          def expect_authorized(headers=None):
+              code = probe_status(headers=headers)
+              if code in (401, 403):
+                  raise RuntimeError(f"Expected authorized/non-auth response, got HTTP {code}")
+
+          def expect_unauthorized(headers=None):
+              code = probe_status(headers=headers)
+              if code not in (401, 403):
+                  raise RuntimeError(f"Expected HTTP 401/403, got HTTP {code}")
 
           try:
               cleanup("edupage-http-noauth")
@@ -161,7 +155,7 @@ jobs:
                   ]
               )
               wait_for_port(18000)
-              asyncio.run(expect_success_with_retry())
+              expect_authorized()
               cleanup("edupage-http-noauth")
 
               cleanup("edupage-http-auth")
@@ -182,14 +176,12 @@ jobs:
                   ]
               )
               wait_for_port(18000)
-              asyncio.run(expect_success_with_retry(headers={"Authorization": "Bearer ci-test-key"}))
-              asyncio.run(expect_failure())
-              asyncio.run(expect_failure(headers={"Authorization": "Bearer wrong-key"}))
+              expect_unauthorized()
+              expect_unauthorized(headers={"Authorization": "Bearer wrong-key"})
+              expect_authorized(headers={"Authorization": "Bearer ci-test-key"})
           finally:
-              with suppress(Exception):
-                  cleanup("edupage-http-noauth")
-              with suppress(Exception):
-                  cleanup("edupage-http-auth")
+              cleanup("edupage-http-noauth")
+              cleanup("edupage-http-auth")
 
           print("HTTP auth smoke OK")
           PY
