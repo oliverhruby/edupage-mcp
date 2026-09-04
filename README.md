@@ -1,4 +1,4 @@
-# edupage-mcp
+# EduPage MCP Server
 
 [![GitHub release](https://img.shields.io/github/v/release/oliverhruby/edupage-mcp.svg?label=release)](https://github.com/oliverhruby/edupage-mcp/releases)
 [![Quality gates](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/quality-gates.yml.svg?label=quality%20gates)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/quality-gates.yml)
