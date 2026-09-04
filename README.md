@@ -1,14 +1,11 @@
 # edupage-mcp
 
 [![PyPI version](https://img.shields.io/pypi/v/edupage-mcp-full.svg)](https://pypi.org/project/edupage-mcp-full/)
-[![Python versions](https://img.shields.io/pypi/pyversions/edupage-mcp-full.svg)](https://pypi.org/project/edupage-mcp-full/)
 [![Downloads](https://img.shields.io/pypi/dm/edupage-mcp-full.svg)](https://pypi.org/project/edupage-mcp-full/)
-[![License](https://img.shields.io/github/license/oliverhruby/edupage-mcp.svg)](https://github.com/oliverhruby/edupage-mcp/blob/main/LICENSE)
 [![Quality gates](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/quality-gates.yml.svg)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/quality-gates.yml)
 [![Security](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/security.yml.svg)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/security.yml)
 [![Container security](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/container-security.yml.svg)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/container-security.yml)
 [![Coverage drift](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/upstream-coverage.yml.svg)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/upstream-coverage.yml)
-[![Dependabot](https://img.shields.io/badge/dependabot-enabled-025e8c.svg)](https://github.com/oliverhruby/edupage-mcp/security/dependabot)
 
 A Model Context Protocol (MCP) server that exposes the full functionality of the
 [`edupage-api`](https://github.com/EdupageAPI/edupage-api) Python library to AI
