@@ -67,7 +67,6 @@ jobs:
       - name: HTTP auth mode smoke
         run: |
           python - <<'PY'
-          import json
           import socket
           import subprocess
           import time
@@ -76,14 +75,6 @@ jobs:
 
           IMAGE = "edupage-mcp:ci"
           URL_CANDIDATES = ["http://127.0.0.1:18000/mcp", "http://127.0.0.1:18000/"]
-          JSONRPC_BODY = json.dumps(
-              {
-                  "jsonrpc": "2.0",
-                  "id": "ci-check",
-                  "method": "tools/list",
-                  "params": {},
-              }
-          ).encode("utf-8")
 
           def run_cmd(args):
               subprocess.run(args, check=True)
@@ -101,11 +92,11 @@ jobs:
                   time.sleep(0.2)
               raise RuntimeError(f"Timed out waiting for 127.0.0.1:{port}")
 
-          def post_status(url: str, headers=None) -> int:
-              req_headers = {"Content-Type": "application/json", "Accept": "application/json"}
+          def request_status(url: str, headers=None) -> int:
+              req_headers = {"Accept": "application/json"}
               if headers:
                   req_headers.update(headers)
-              req = urllib.request.Request(url, data=JSONRPC_BODY, headers=req_headers, method="POST")
+              req = urllib.request.Request(url, headers=req_headers, method="GET")
               try:
                   with urllib.request.urlopen(req, timeout=4) as resp:
                       return resp.getcode()
@@ -118,7 +109,7 @@ jobs:
               while time.time() - start < timeout:
                   for url in URL_CANDIDATES:
                       try:
-                          code = post_status(url, headers=headers)
+                          code = request_status(url, headers=headers)
                           if code != 404:
                               return code
                       except Exception as exc:  # noqa: BLE001
