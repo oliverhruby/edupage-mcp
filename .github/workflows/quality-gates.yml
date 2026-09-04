@@ -71,6 +71,7 @@ jobs:
           import socket
           import subprocess
           import time
+          from contextlib import suppress
 
           from mcp import ClientSession
           from mcp.client.streamable_http import streamablehttp_client
@@ -122,6 +123,20 @@ jobs:
               if count < 40:
                   raise RuntimeError(f"Expected >=40 tools, got {count}")
 
+          async def expect_success_with_retry(headers=None, timeout: float = 25.0):
+              start = time.time()
+              last_exc = None
+              while time.time() - start < timeout:
+                  try:
+                      await expect_success(headers=headers)
+                      return
+                  except Exception as exc:  # noqa: BLE001
+                      last_exc = exc
+                      await asyncio.sleep(0.4)
+              if last_exc is None:
+                  raise RuntimeError("Timed out waiting for successful HTTP MCP handshake")
+              raise last_exc
+
           async def expect_failure(headers=None):
               try:
                   await try_list_tools(headers=headers)
@@ -146,7 +161,7 @@ jobs:
                   ]
               )
               wait_for_port(18000)
-              asyncio.run(expect_success())
+              asyncio.run(expect_success_with_retry())
               cleanup("edupage-http-noauth")
 
               cleanup("edupage-http-auth")
@@ -167,12 +182,14 @@ jobs:
                   ]
               )
               wait_for_port(18000)
+              asyncio.run(expect_success_with_retry(headers={"Authorization": "Bearer ci-test-key"}))
               asyncio.run(expect_failure())
               asyncio.run(expect_failure(headers={"Authorization": "Bearer wrong-key"}))
-              asyncio.run(expect_success(headers={"Authorization": "Bearer ci-test-key"}))
           finally:
-              cleanup("edupage-http-noauth")
-              cleanup("edupage-http-auth")
+              with suppress(Exception):
+                  cleanup("edupage-http-noauth")
+              with suppress(Exception):
+                  cleanup("edupage-http-auth")
 
           print("HTTP auth smoke OK")
           PY
