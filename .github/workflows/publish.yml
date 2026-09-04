@@ -1,4 +1,4 @@
-name: publish
+name: Publish
 
 # Publish edupage-mcp-full to PyPI using OpenID Connect (trusted publishing).
 #

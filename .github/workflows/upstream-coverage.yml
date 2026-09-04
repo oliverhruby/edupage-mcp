@@ -1,0 +1,47 @@
+name: Upstream Coverage
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  coverage-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install package (with current dependency resolution)
+        run: python -m pip install --upgrade pip && python -m pip install .
+
+      - name: Check edupage-api coverage drift
+        run: python scripts/check_edupage_api_coverage.py
+
+  latest-upstream-canary:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install package then force latest edupage-api
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+          python -m pip install --upgrade edupage-api
+
+      - name: Check coverage against latest edupage-api
+        run: python scripts/check_edupage_api_coverage.py

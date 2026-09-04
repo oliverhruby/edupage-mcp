@@ -32,6 +32,7 @@ venv
 *.log
 
 # IDE and editor settings
+# IDE/editor
 .vscode
 .idea
 *.swp
@@ -67,4 +68,12 @@ dmypy.json
 # tests/
 
 # macOS
+.DS_Store
+# Type checkers
+.mypy_cache
+.dmypy.json
+dmypy.json
+.pyre
+
+# OS files
 .DS_Store

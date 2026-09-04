@@ -1,0 +1,13 @@
+# Add accepted findings as one ID per line, for example:
+# CVE-2024-12345
+# GHSA-xxxx-yyyy-zzzz
+#
+# Keep this file minimal and temporary:
+# - include a link to tracking issue in PR text
+# - set a target removal date
+
+# False positives in image scan: package versions are not present in runtime
+# image (`setuptools==84.0.0`, no `msgpack` installed).
+# Re-evaluate on Trivy DB updates. Target removal: 2026-12-31.
+GHSA-6v7p-g79w-8964
+CVE-2025-47273

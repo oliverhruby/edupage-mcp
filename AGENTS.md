@@ -114,6 +114,27 @@ and changed the API. We target the FastMCP v1 API. Keep `mcp<2`. Bump
   and weekly. A run that finds a CVE **fails the workflow**; fix the pinned
   version in `pyproject.toml` and re-verify with `pip-audit` locally before
   releasing.
+- **Quality gates** (`.github/workflows/quality-gates.yml`):
+  - `python-sanity` compiles `src/edupage_mcp/__init__.py` and verifies
+    `pip install .` from source.
+  - `docker-mcp-smoke` builds the Docker image and performs an MCP stdio
+    handshake (`initialize` + `tools/list`) against the container.
+- **Trivy container scan** (`.github/workflows/container-security.yml`): builds
+  the Docker image and scans for vulnerabilities on every push/PR to main and
+  weekly. The job fails on `HIGH`/`CRITICAL` findings (`ignore-unfixed: true`).
+  Use `.trivyignore` only for temporary, documented exceptions.
+- **Upstream coverage drift** (`.github/workflows/upstream-coverage.yml`):
+  checks that public `edupage-api` `Edupage` methods are covered by wrapper calls
+  or explicitly ignored in `scripts/edupage_api_ignored_methods.json` with a
+  reason. Also runs a scheduled canary against the latest `edupage-api`.
+
+`main` branch protection requires these checks:
+
+- `quality-gates / python-sanity`
+- `quality-gates / docker-mcp-smoke`
+- `security / pip-audit`
+- `container-security / trivy-image`
+- `upstream-coverage / coverage-drift`
 
 Local check:
 
@@ -125,6 +146,9 @@ To run any workflow manually from `gh`:
 
 ```bash
 gh workflow run security.yml --repo oliverhruby/edupage-mcp
+gh workflow run quality-gates.yml --repo oliverhruby/edupage-mcp
+gh workflow run container-security.yml --repo oliverhruby/edupage-mcp
+gh workflow run upstream-coverage.yml --repo oliverhruby/edupage-mcp
 ```
 
 ## Build / verify
@@ -147,6 +171,10 @@ reference" table and the tool count in the "What it provides" blurb.
 Publishing uses **OIDC trusted publishing** via GitHub Actions — no API token.
 See comments at the top of `.github/workflows/publish.yml` for the one-time PyPI
 registration (project `edupage-mcp-full`, workflow name `publish.yml`).
+GitHub Releases are created automatically on tag push by
+`.github/workflows/release.yml` using GitHub's generated release notes.
+Container images are published to GHCR on tag push by
+`.github/workflows/publish-container.yml`.
 
 To release a new version:
 
