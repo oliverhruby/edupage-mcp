@@ -842,6 +842,41 @@ def get_next_week_timetable(subdomain: str = None) -> dict:
 
 
 @_tool
+def get_timetable_range(
+    target_type: str,
+    target_id: str,
+    start_date: str,
+    end_date: str,
+    subdomain: str = None,
+) -> dict:
+    """Get timetable for a target (class, student, teacher, classroom) for every day
+    between start_date and end_date (inclusive). Returns a dict keyed by date
+    (YYYY‑MM‑DD) with each value being the result of `get_timetable` for that day.
+    Days with no published data get an empty lessons list."""
+    def go():
+        client = _require_client(subdomain)
+        start = _parse_date(start_date)
+        end = _parse_date(end_date)
+        if end < start:
+            raise RuntimeError("end_date must be >= start_date")
+        result: dict = {}
+        cur = start
+        while cur <= end:
+            d = cur.isoformat()
+            r = get_timetable(
+                target_type=target_type,
+                target_id=target_id,
+                date_str=d,
+                subdomain=subdomain,
+            )
+            result[d] = r
+            cur += _dt.timedelta(days=1)
+        return {"subdomain": _resolve_subdomain(subdomain), "range": result}
+
+    return _run(go, "get_timetable_range")
+
+
+@_tool
 def get_periods(subdomain: str = None) -> dict:
     """Get the bell schedule (periods with start/end times) from the logged-in data."""
     def go():
