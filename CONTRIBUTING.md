@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for contributing to `edupage-mcp-full`.
+Thanks for contributing to `edupage-mcp`.
 
 ## Local setup
 
