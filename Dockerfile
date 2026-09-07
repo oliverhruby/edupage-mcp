@@ -1,5 +1,7 @@
 FROM python:3.11-alpine
 
+RUN apk upgrade --no-cache
+
 WORKDIR /app
 
 RUN adduser -D appuser
