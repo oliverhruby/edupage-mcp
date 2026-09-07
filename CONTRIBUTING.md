@@ -82,9 +82,9 @@ environments to avoid global package conflicts.
 Version source of truth is `pyproject.toml`.
 
 - Tag format: `vX.Y.Z`
-- PyPI publish: `.github/workflows/publish.yml` (OIDC trusted publishing)【.github/workflows/publish.yml】
-- GitHub release notes: `.github/workflows/release.yml` (auto-generated)【.github/workflows/release.yml】
-- GHCR image publish: `.github/workflows/publish-container.yml`【.github/workflows/publish-container.yml】
+- PyPI publish: [.github/workflows/publish.yml](.github/workflows/publish.yml) (OIDC trusted publishing)
+- GitHub release notes: [.github/workflows/release.yml](.github/workflows/release.yml) (auto-generated)
+- GHCR image publish: [.github/workflows/publish-container.yml](.github/workflows/publish-container.yml)
 
 Ensure tag version matches `pyproject.toml` version.
 

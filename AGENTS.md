@@ -1,4 +1,4 @@
-# AGENTS.md — edupage-mcp-full
+# AGENTS.md
 
 Guidance for AI agents (and humans) working on this repository. This file is
 about **maintaining the code** — it is *not* end-user runtime documentation
