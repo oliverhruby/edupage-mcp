@@ -82,23 +82,42 @@ environments to avoid global package conflicts.
 Version source of truth is `pyproject.toml`.
 
 - Tag format: `vX.Y.Z`
-- PyPI publish: `.github/workflows/publish.yml` (OIDC trusted publishing)
-- GitHub release notes: `.github/workflows/release.yml` (auto-generated)
-- GHCR image publish: `.github/workflows/publish-container.yml`
+- PyPI publish: `.github/workflows/publish.yml` (OIDC trusted publishing)【.github/workflows/publish.yml】
+- GitHub release notes: `.github/workflows/release.yml` (auto-generated)【.github/workflows/release.yml】
+- GHCR image publish: `.github/workflows/publish-container.yml`【.github/workflows/publish-container.yml】
 
 Ensure tag version matches `pyproject.toml` version.
 
 ## CI quality gates
 
-`main` branch requires these checks:
+All of the following checks must pass on `main` before a push is allowed.  
+They are defined in the corresponding GitHub Actions workflow files linked below.
 
-- `quality-gates / python-sanity`
-- `quality-gates / docker-mcp-smoke`
-- `security / pip-audit`
-- `container-security / trivy-image`
-- `upstream-coverage / coverage-drift`
+- **[python-sanity](.github/workflows/quality-gates.yml)** – runs `python -m py_compile src/edupage_mcp/__init__.py` and `pip install .` to verify the package compiles and can be imported. Ensures no syntax errors and that the library can be loaded.
+
+- **[docker-mcp-smoke](.github/workflows/docker-mcp-smoke.yml)** – builds the Docker image and performs an MCP stdio handshake (`initialize` + `tools/list`) against the container to confirm the server starts correctly.
+
+- **[security / pip-audit](.github/workflows/security.yml)** – runs `pip-audit` against the full dependency tree (direct + transitive) on every push/PR to `main` and weekly. The workflow fails if any HIGH or CRITICAL CVE is detected.
+
+- **[container-security / trivy-image](.github/workflows/container-security.yml)** – builds the Docker image and runs Trivy vulnerability scanning. The job fails on HIGH or CRITICAL findings, helping keep the image secure.
+
+- **[upstream-coverage / coverage-drift](.github/workflows/upstream-coverage.yml)** – checks that every public `edupage-api` method is either wrapped by a call in `src/edupage_mcp/__init__.py` or explicitly listed in `scripts/edupage_api_ignored_methods.json` with a reason. It also runs a canary request against the latest `edupage-api` to catch drift.
 
 ## Upstream coverage drift check
+
+To keep parity with `edupage-api`, CI runs
+`.github/workflows/upstream-coverage.yml`.
+
+It verifies each public `Edupage` method is either:
+
+- covered by wrapper usage in `src/edupage_mcp/__init__.py`, or
+- explicitly listed in `scripts/edupage_api_ignored_methods.json` with a reason.
+
+Run locally:
+
+```bash
+python scripts/check_edupage_api_coverage.py
+```
 
 To keep parity with `edupage-api`, CI runs
 `.github/workflows/upstream-coverage.yml`.
