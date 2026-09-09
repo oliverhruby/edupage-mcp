@@ -27,7 +27,6 @@ dependencies = [
     "mcp<2",
     "edupage-api>=0.12.3",
 ]
-mcpName = "io.github.oliverhruby/edupage-mcp"
 
 [project.urls]
 Homepage = "https://github.com/oliverhruby/edupage-mcp"
