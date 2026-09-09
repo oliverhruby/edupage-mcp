@@ -727,6 +727,20 @@ def _student_timetable_at(client, sub, name, student_id, d):
                 client.switch_to_parent()
             except Exception:
                 pass
+    elif role == "teacher":
+        # Teachers can read any student's timetable directly (no account switching).
+        target = student
+        if isinstance(target, EduStudentSkeleton):
+            target = next(
+                (s for s in (client.get_students() or []) if str(getattr(s, "person_id", "")) == str(sid)),
+                student,
+            )
+        if isinstance(target, EduStudentSkeleton):
+            tt = None
+            lessons = []
+        else:
+            tt = client.get_timetable(target, d)
+            lessons = [_serialize(ls) for ls in tt.lessons] if tt else []
     else:
         tt = client.get_my_timetable(d)
         lessons = [_serialize(ls) for ls in tt.lessons] if tt else []
