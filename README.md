@@ -392,7 +392,7 @@ fully automatic.
 | `get_news` | School news |  |
 | `get_timetable_changes` | Substitutions / timetable changes for a date |  |
 | `get_missing_teachers` | Teachers missing on a date |  |
-| `get_meals` | Meal menu (snack/lunch/afternoon snack) |  |
+| `get_meals` | Meal menu (snack/lunch/afternoon snack; `include_breakfast`/`include_dinner` add extras) |  |
 | `choose_meal` | Order a meal | ✅ |
 | `sign_off_meal` | Cancel an ordered meal | ✅ |
 | `rate_meal` | Rate a meal (quality/quantity) | ✅ |
@@ -425,6 +425,11 @@ fully automatic.
   the substitution page) and can raise if a teacher's name no longer matches.
 - Meal `rate_meal` and ordering depend on the school publishing menus with the
   matching identifiers; not all schools expose ratings.
+- `get_meals` first tries the per-student meal-ordering endpoint (needed for
+  ordering/ratings). When a school doesn't enable that, it falls back to the
+  school's **public canteen menu widget** (`/menu/?wid=menu_CanteenMenu_1`),
+  which is read-only (no ordering) and may include extra meals — pass
+  `include_breakfast=true` / `include_dinner=true` to also get Raňajky/Večera.
 
 ---
 

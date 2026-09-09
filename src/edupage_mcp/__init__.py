@@ -13,8 +13,10 @@ All `get_*` tools are read-only.
 
 import builtins
 import datetime as _dt
+import html
 import json
 import os
+import re
 import sys
 import time
 import unicodedata
@@ -1063,24 +1065,144 @@ def get_missing_teachers(date_str: str = None, subdomain: str = None) -> dict:
 # --------------------------------------------------------------------------
 # Meals
 # --------------------------------------------------------------------------
+# Some schools don't enable the per-student meal-ordering app that
+# edupage-api's `get_meals` parses ("novyListok"/"stravnikid"); instead they
+# publish a public "Canteen Menu" widget on their site. We fall back to that
+# widget so `get_meals` still returns the menu.
+_CANTEEN_WIDGET = "menu_CanteenMenu_1"
+# data-listItemId suffix -> meal slot. 0/4 (breakfast/dinner) are extras beyond
+# the standard snack/lunch/afternoon_snack contract that edupage-api uses.
+_CANTEEN_MEAL_SLOTS = {0: "breakfast", 1: "snack", 2: "lunch", 3: "afternoon_snack", 4: "dinner"}
+
+
+def _strip_html_text(value):
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", "", value))).strip()
+
+
+def _split_food_weight(food):
+    m = re.search(r"\((\d+)\)\s*$", food)
+    if m:
+        return food[: m.start()].strip(), m.group(1)
+    return food, ""
+
+
+def _parse_canteen_menu(text, day):
+    """Parse the school's public canteen widget HTML for one date.
+
+    Returns a dict keyed by meal slot -> plain meal dict (or None), e.g.
+    {"breakfast": None, "snack": {...}, "lunch": {...}, "afternoon_snack": ...,
+     "dinner": ...}. Returns None when the widget isn't present in the page.
+    """
+    if f'id="{_CANTEEN_WIDGET}"' not in text:
+        return None
+
+    target = day.isoformat()
+
+    def lines(block, key):
+        start = block.find(key)
+        if start == -1:
+            return []
+        open_pos = block.find(">", start) + 1
+        close = block.find("</div>", open_pos)
+        segment = block[open_pos:close] if close != -1 else block[open_pos:]
+        parts = [_strip_html_text(p) for p in re.split(r"<br\s*/?>", segment)]
+        return [p for p in parts if p and "skgd" not in p and "Div_" not in p]
+
+    by_day = {}
+    for li in re.split(r"(?i)(?=<\s*li\b)", text):
+        m = re.search(r'data-listItemId="([^"]+)"', li)
+        if not m:
+            continue
+        item_id = m.group(1)
+        if item_id.startswith("__mt"):
+            continue
+        dm = re.match(r"(\d{4}-\d{2}-\d{2})-(\d+)$", item_id)
+        if not dm or dm.group(1) != target:
+            continue
+        idx = int(dm.group(2))
+        if idx not in _CANTEEN_MEAL_SLOTS:
+            continue
+        title_m = re.search(r"menu_DFText_3\"[^>]*>\s*([^<]+?)\s*</span>", li)
+        by_day.setdefault(dm.group(1), {})[idx] = {
+            "title": title_m.group(1).strip() if title_m else _CANTEEN_MEAL_SLOTS[idx],
+            "foods": lines(li, "menu_DFText_4"),
+            "allergens": lines(li, "menu_DFText_5"),
+        }
+
+    result = {slot: None for slot in _CANTEEN_MEAL_SLOTS.values()}
+    for idx, slot in _CANTEEN_MEAL_SLOTS.items():
+        item = by_day.get(target, {}).get(idx)
+        if not item:
+            continue
+        menus = []
+        foods = item["foods"]
+        for i, food in enumerate(foods):
+            name, weight = _split_food_weight(food)
+            allergens = item["allergens"][i] if i < len(item["allergens"]) else ""
+            menus.append({"name": name, "allergens": allergens, "weight": weight,
+                          "number": None, "rating": None})
+        result[slot] = {
+            "served_from": None,
+            "served_to": None,
+            "amount_of_foods": len(menus),
+            "chooseable_menus": [],
+            "can_be_changed_until": None,
+            "title": item["title"],
+            "menus": menus,
+            "date": target,
+            "ordered_meal": None,
+            "meal_type": idx,
+        }
+    return result
+
+
+def _fetch_canteen_menu(client, day):
+    sub = client.subdomain
+    url = f"https://{sub}.edupage.org/menu/?wid={_CANTEEN_WIDGET}&date={day.isoformat()}"
+    resp = client.session.get(url)
+    return _parse_canteen_menu(resp.content.decode("utf-8", "replace"), day)
+
+
 @_tool
-def get_meals(date_str: str = None, subdomain: str = None) -> dict:
-    """Get the meal menu (snack/lunch/afternoon snack) for a date (default today)."""
+def get_meals(date_str: str = None, include_breakfast: bool = False,
+              include_dinner: bool = False, subdomain: str = None) -> dict:
+    """Get the meal menu (snack/lunch/afternoon snack) for a date (default today).
+
+    Tries the personal meal-ordering endpoint first; when the school hasn't
+    enabled it, falls back to the school's public canteen menu widget. By
+    default only snack/lunch/afternoon_snack are returned; set
+    include_breakfast / include_dinner to also include those extra meals
+    (only available via the public widget)."""
     def go():
         client = _require_client(subdomain)
         d = _parse_date(date_str)
+        sub = _resolve_subdomain(subdomain)
+        meals = None
         try:
             meals = client.get_meals(d)
         except (edupage_exceptions.InvalidMealsData, IndexError, AttributeError, KeyError, TypeError):
-            meals = Meals(None, None, None)
+            meals = None
         except edupage_exceptions.ExpiredSessionException:
-            sub = _resolve_subdomain(subdomain)
             if _relogin_subdomain(sub):
                 client = _require_client(sub)
                 meals = client.get_meals(d)
             else:
                 raise
-        return {"date": d.isoformat(), "subdomain": _resolve_subdomain(subdomain), "meals": _serialize(meals)}
+        if meals is None or not any(getattr(meals, m) for m in ("snack", "lunch", "afternoon_snack")):
+            canteen = _fetch_canteen_menu(client, d)
+            if canteen is not None:
+                meals_data = {k: canteen[k] for k in ("snack", "lunch", "afternoon_snack")}
+                if include_breakfast or include_dinner:
+                    meals_data["breakfast"] = canteen.get("breakfast") if include_breakfast else None
+                    meals_data["dinner"] = canteen.get("dinner") if include_dinner else None
+                return {"date": d.isoformat(), "subdomain": sub, "meals": meals_data}
+        meals_data = _serialize(meals) if meals is not None else None
+        if include_breakfast or include_dinner:
+            if meals_data is None:
+                meals_data = {k: None for k in ("snack", "lunch", "afternoon_snack")}
+            meals_data["breakfast"] = None if include_breakfast else meals_data.get("breakfast")
+            meals_data["dinner"] = None if include_dinner else meals_data.get("dinner")
+        return {"date": d.isoformat(), "subdomain": sub, "meals": meals_data}
 
     return _run(go, "get_meals")
 

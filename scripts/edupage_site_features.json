@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "description": "Inventory of EduPage website features (what a logged-in user can see/do on the site) mapped to upstream edupage-api support and MCP tool coverage. Anything with status 'partial' or 'missing' is the backlog for the in-repo site-feature layer. This is a design/coverage manifest, not a scraping layer: keep the server a thin wrapper around edupage-api plus the documented feature-layer modules.",
+  "roles_note": "Role availability per app is approximate; some apps are school-configured and may be hidden by the school admin.",
+  "apps": [
+    {
+      "app": "login_and_2fa",
+      "label": "Login / 2FA / multi-school",
+      "roles": ["student", "parent", "teacher"],
+      "library_methods": ["login", "login_auto", "login_all", "login_from_session", "TwoFactorLogin"],
+      "tools": ["login", "login_auto", "login_all", "login_from_session", "two_factor_check_confirmed", "two_factor_finish", "two_factor_completion_request"],
+      "status": "covered",
+      "status_reason": "Library plus wrapper cover portal login, 2FA device confirmation, and per-subdomain sessions.",
+      "next_steps": []
+    },
+    {
+      "app": "student_switching",
+      "label": "Parent -> student account switching and discovery",
+      "roles": ["parent"],
+      "library_methods": ["switch_to_account", "get_all_students", "get_students"],
+      "tools": ["switch_to_student", "switch_to_parent", "scan_students", "find_student", "get_student_timetable"],
+      "status": "covered",
+      "status_reason": "Role-aware switching, tiered name matching, and per-student timetable lookup are implemented.",
+      "next_steps": []
+    },
+    {
+      "app": "timetable",
+      "label": "Timetable (daily / range / next week / per-student)",
+      "roles": ["student", "parent", "teacher"],
+      "library_methods": ["get_timetable"],
+      "tools": ["get_my_timetable", "get_timetable", "get_timetable_range", "get_next_week_timetable", "get_student_timetable"],
+      "status": "covered",
+      "status_reason": "Full timetable surface is exposed; note get_timetable/get_student_timetable occasionally raise UnknownServerError on some accounts.",
+      "next_steps": ["Investigate UnknownServerError('NoneType' object has no attribute 'get') seen for iprskola."]
+    },
+    {
+      "app": "grades",
+      "label": "Grades (by year/term)",
+      "roles": ["student", "parent"],
+      "library_methods": ["get_grades"],
+      "tools": ["get_grades"],
+      "status": "covered",
+      "status_reason": "Grades exposed with year/term filtering.",
+      "next_steps": []
+    },
+    {
+      "app": "homework_and_assignments",
+      "label": "Homework, tests, exams, projects (timeline)",
+      "roles": ["student", "parent"],
+      "library_methods": ["get_homework", "get_assignments", "get_timeline_notifications"],
+      "tools": ["get_homework", "get_assignments", "get_notifications", "get_notification_history"],
+      "status": "covered",
+      "status_reason": "Timeline-derived homework/assignments/notifications are exposed.",
+      "next_steps": []
+    },
+    {
+      "app": "substitutions",
+      "label": "Substitutions/timetable changes and missing teachers",
+      "roles": ["student", "parent", "teacher"],
+      "library_methods": ["get_timetable_changes", "get_missing_teachers"],
+      "tools": ["get_timetable_changes", "get_missing_teachers"],
+      "status": "covered",
+      "status_reason": "Daily changes and missing-teacher list are exposed.",
+      "next_steps": []
+    },
+    {
+      "app": "school_info",
+      "label": "Events, news, absences, periods/bell schedule",
+      "roles": ["student", "parent"],
+      "library_methods": ["get_upcoming_events", "get_news", "get_absences", "get_periods", "get_ringing"],
+      "tools": ["get_upcoming_events", "get_news", "get_absences", "get_periods", "get_next_ringing_time"],
+      "status": "covered",
+      "status_reason": "School-level read features are exposed.",
+      "next_steps": []
+    },
+    {
+      "app": "canteen_menu",
+      "label": "Canteen menu (read + ordering)",
+      "roles": ["student", "parent"],
+      "library_methods": ["get_meals"],
+      "tools": ["get_meals", "choose_meal", "sign_off_meal", "rate_meal"],
+      "status": "partial",
+      "status_reason": "Reading the menu is now covered for both per-student ordering schools and schools that only expose the public canteen widget (menu_CanteenMenu_1 fallback). Ordering (choose/sign-off/rate) still requires the school's ordering module; iprskola is read-only via the widget.",
+      "next_steps": ["None for read. Ordering stays blocked until a school with the ordering module is validated, or the widget exposes order actions."]
+    },
+    {
+      "app": "messages",
+      "label": "Messages (send + read inbox)",
+      "roles": ["student", "parent", "teacher"],
+      "library_methods": ["send_message"],
+      "tools": ["send_message"],
+      "status": "partial",
+      "status_reason": "Sending works; reading the inbox is only surfaced indirectly through timeline notifications (get_notifications/get_notification_history). There is no full message-thread listing.",
+      "next_steps": ["Feature-layer module to list/summarize message threads from the communication app."]
+    },
+    {
+      "app": "cloud",
+      "label": "Cloud / file upload",
+      "roles": ["student", "teacher"],
+      "library_methods": ["cloud_upload"],
+      "tools": [],
+      "status": "partial",
+      "status_reason": "Upstream exposes only upload (and it is currently ignored by the coverage check, not exposed as an MCP tool). No file listing/download.",
+      "next_steps": ["Feature-layer module for cloud file listing/download if demand appears."]
+    },
+    {
+      "app": "library",
+      "label": "School library",
+      "url_note": "/library/",
+      "roles": ["student", "teacher"],
+      "library_methods": [],
+      "tools": [],
+      "status": "missing",
+      "status_reason": "No library or MCP support.",
+      "next_steps": ["Feature-layer module if demand appears."]
+    },
+    {
+      "app": "calendar",
+      "label": "Calendar (school/personal events calendar)",
+      "url_note": "/calendar/",
+      "roles": ["student", "parent", "teacher"],
+      "library_methods": [],
+      "tools": ["get_upcoming_events"],
+      "status": "missing",
+      "status_reason": "Upcoming events come from the timeline feed; the rich calendar app is not covered.",
+      "next_steps": ["Feature-layer module to read the calendar grid."]
+    },
+    {
+      "app": "forms",
+      "label": "Forms / questionnaires",
+      "url_note": "/forms/",
+      "roles": ["student", "parent"],
+      "library_methods": [],
+      "tools": [],
+      "status": "missing",
+      "status_reason": "No library or MCP support.",
+      "next_steps": ["Feature-layer module if demand appears."]
+    },
+    {
+      "app": "photos",
+      "label": "Photo gallery",
+      "url_note": "/photos/",
+      "roles": ["student", "parent", "teacher"],
+      "library_methods": [],
+      "tools": [],
+      "status": "missing",
+      "status_reason": "No library or MCP support.",
+      "next_steps": ["Feature-layer module if demand appears."]
+    },
+    {
+      "app": "exam",
+      "label": "Exam / test administration",
+      "url_note": "/exam/",
+      "roles": ["student", "teacher"],
+      "library_methods": [],
+      "tools": [],
+      "status": "missing",
+      "status_reason": "No library or MCP support.",
+      "next_steps": ["Feature-layer module if demand appears."]
+    },
+    {
+      "app": "maturita",
+      "label": "Maturita / leaving-exam management",
+      "url_note": "/maturita/",
+      "roles": ["student", "teacher"],
+      "library_methods": [],
+      "tools": [],
+      "status": "missing",
+      "status_reason": "No library or MCP support.",
+      "next_steps": ["Feature-layer module if demand appears."]
+    },
+    {
+      "app": "elearning",
+      "label": "e-Learning (assignments/courses in the app)",
+      "url_note": "/elearning/",
+      "roles": ["student"],
+      "library_methods": [],
+      "tools": [],
+      "status": "missing",
+      "status_reason": "No library or MCP support.",
+      "next_steps": ["Feature-layer module if demand appears."]
+    }
+  ]
+}
