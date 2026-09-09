@@ -38,3 +38,6 @@ edupage-mcp-full = "edupage_mcp:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+edupage_mcp = ["skills/school-day-summary/SKILL.md"]

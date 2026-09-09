@@ -36,8 +36,28 @@ from edupage_api.people import EduAccount, EduParent, EduStudent, EduStudentSkel
 from edupage_api.ringing import RingingTime, RingingType
 from edupage_api.subjects import Subject
 from edupage_api.substitution import Action, TimetableChange
+from edupage_api.timeline import TimelineEvents as _TimelineEvents
 from edupage_api.timeline import EventType, TimelineEvent
 from edupage_api.timetables import Lesson, Timetable
+
+# ---------------------------------------------------------------------------
+# Local workaround for an upstream edupage-api bug (master as of 0.12.5):
+# get_notifications_history() passes data["timelineUserProps"] straight to
+# __parse_items, but for some schools (e.g. iprskola) that field arrives as a
+# JSON array ([]) instead of a dict, so __parse_items crashes with
+# "'list' object has no attribute 'get'". Coerce any non-dict user_props to {}
+# at this boundary. Revisit once upstream normalizes this shape itself.
+# ---------------------------------------------------------------------------
+_UPSTREAM_PARSE_ITEMS = getattr(_TimelineEvents, "_TimelineEvents__parse_items")
+
+
+def _parse_items_coerce_user_props(self, timeline_items, user_props=None):
+    if not isinstance(user_props, dict):
+        user_props = {}
+    return _UPSTREAM_PARSE_ITEMS(self, timeline_items, user_props)
+
+
+_TimelineEvents._TimelineEvents__parse_items = _parse_items_coerce_user_props
 
 try:
     from mcp.server.fastmcp import FastMCP
@@ -1037,6 +1057,22 @@ def get_news(subdomain: str = None) -> dict:
 # --------------------------------------------------------------------------
 # Substitutions / teachers
 # --------------------------------------------------------------------------
+def _get_changes_for(client, sub, d):
+    """Timetable changes (substitutions) for a date, with re-login handling."""
+    try:
+        changes = client.get_timetable_changes(d)
+    except edupage_exceptions.ExpiredSessionException:
+        if not _relogin_subdomain(sub):
+            changes = []
+        else:
+            client = _require_client(sub)
+            try:
+                changes = client.get_timetable_changes(d)
+            except edupage_exceptions.ExpiredSessionException:
+                changes = []
+    return [_serialize(c) for c in changes] if changes is not None else []
+
+
 @_tool
 def get_timetable_changes(date_str: str = None, subdomain: str = None) -> dict:
     """Get substitution/timetable changes for a date (default today)."""
@@ -1044,21 +1080,7 @@ def get_timetable_changes(date_str: str = None, subdomain: str = None) -> dict:
         client = _require_client(subdomain)
         d = _parse_date(date_str)
         sub = _resolve_subdomain(subdomain)
-        try:
-            changes = client.get_timetable_changes(d)
-        except edupage_exceptions.ExpiredSessionException:
-            if not _relogin_subdomain(sub):
-                changes = []
-            else:
-                client = _require_client(sub)
-                try:
-                    changes = client.get_timetable_changes(d)
-                except edupage_exceptions.ExpiredSessionException:
-                    changes = []
-        if changes is None:
-            return {"date": d.isoformat(), "subdomain": _resolve_subdomain(subdomain), "changes": []}
-        return {"date": d.isoformat(), "subdomain": _resolve_subdomain(subdomain),
-                "changes": [_serialize(c) for c in changes]}
+        return {"date": d.isoformat(), "subdomain": sub, "changes": _get_changes_for(client, sub, d)}
 
     return _run(go, "get_timetable_changes")
 
@@ -1079,14 +1101,21 @@ def get_missing_teachers(date_str: str = None, subdomain: str = None) -> dict:
 # --------------------------------------------------------------------------
 # Meals
 # --------------------------------------------------------------------------
-# Some schools don't enable the per-student meal-ordering app that
-# edupage-api's `get_meals` parses ("novyListok"/"stravnikid"); instead they
-# publish a public "Canteen Menu" widget on their site. We fall back to that
-# widget so `get_meals` still returns the menu.
+# edupage-api 0.12.5's `get_meals` parses the per-student meal-ordering page
+# ("novyListok") only in the shape where each day is a dict keyed "1"/"2"/"3",
+# and crashes (AttributeError) when a school publishes the day as a list of
+# serving windows instead. We therefore keep two wrapper-level fallbacks so
+# `get_meals` still returns the menu:
+#   1. the school's public "Canteen Menu" widget (schools that don't enable the
+#      per-student app), and
+#   2. the "novyListok" page itself when its day entry is a list of serving
+#      windows (each carrying vydaj_od/vydaj_do and per-menu rows) that the
+#      personal-ordering UI renders. Position (list) or key (sparse dict on
+#      weekends) in the day entry is the meal slot, matching the map below.
 _CANTEEN_WIDGET = "menu_CanteenMenu_1"
-# data-listItemId suffix -> meal slot. 0/4 (breakfast/dinner) are extras beyond
-# the standard snack/lunch/afternoon_snack contract that edupage-api uses.
-_CANTEEN_MEAL_SLOTS = {0: "breakfast", 1: "snack", 2: "lunch", 3: "afternoon_snack", 4: "dinner"}
+# meal slot index -> slot. 0/4 (breakfast/dinner) are extras beyond the standard
+# snack/lunch/afternoon_snack contract that edupage-api uses.
+_MEAL_SLOTS = {0: "breakfast", 1: "snack", 2: "lunch", 3: "afternoon_snack", 4: "dinner"}
 
 
 def _strip_html_text(value):
@@ -1134,17 +1163,17 @@ def _parse_canteen_menu(text, day):
         if not dm or dm.group(1) != target:
             continue
         idx = int(dm.group(2))
-        if idx not in _CANTEEN_MEAL_SLOTS:
+        if idx not in _MEAL_SLOTS:
             continue
         title_m = re.search(r"menu_DFText_3\"[^>]*>\s*([^<]+?)\s*</span>", li)
         by_day.setdefault(dm.group(1), {})[idx] = {
-            "title": title_m.group(1).strip() if title_m else _CANTEEN_MEAL_SLOTS[idx],
+            "title": title_m.group(1).strip() if title_m else _MEAL_SLOTS[idx],
             "foods": lines(li, "menu_DFText_4"),
             "allergens": lines(li, "menu_DFText_5"),
         }
 
-    result = {slot: None for slot in _CANTEEN_MEAL_SLOTS.values()}
-    for idx, slot in _CANTEEN_MEAL_SLOTS.items():
+    result = {slot: None for slot in _MEAL_SLOTS.values()}
+    for idx, slot in _MEAL_SLOTS.items():
         item = by_day.get(target, {}).get(idx)
         if not item:
             continue
@@ -1177,6 +1206,110 @@ def _fetch_canteen_menu(client, day):
     return _parse_canteen_menu(resp.content.decode("utf-8", "replace"), day)
 
 
+def _strip_recipe_code(name):
+    """Drop recipe-code prefixes like '2.065 ' from meal names, per line."""
+    return "\n".join(re.sub(r"^\s*\d+\.\d+\s+", "", line)
+                     for line in str(name).splitlines())
+
+
+def _fetch_novylistok(client, day):
+    """Fetch the per-student meal-ordering page and parse day entries published
+    in the serving-windows (list) shape that edupage-api 0.12.5 cannot handle.
+    Returns the same slot-keyed dict as _parse_canteen_menu, or None when the
+    page doesn't carry a day entry (school uses the old shape / no meals)."""
+    sub = client.subdomain
+    url = f"https://{sub}.edupage.org/menu/?date={day.strftime('%Y%m%d')}"
+    resp = client.session.get(url)
+    text = resp.content.decode("utf-8", "replace")
+    try:
+        payload = json.loads(text.split("edupageData: ")[1].split(",\r\n")[0])
+    except (IndexError, ValueError):
+        return None
+    nl = (payload or {}).get(sub, {}).get("novyListok", {})
+    entry = nl.get(day.isoformat())
+    if not entry:
+        return None
+    items = entry.items() if isinstance(entry, dict) else enumerate(entry)
+    result = {slot: None for slot in _MEAL_SLOTS.values()}
+    for pos, item in items:
+        try:
+            idx = int(pos)
+        except (TypeError, ValueError):
+            continue
+        slot = _MEAL_SLOTS.get(idx)
+        if not slot or not isinstance(item, dict):
+            continue
+        menu_defs = item.get("menus") or {}
+        if not isinstance(menu_defs, dict) or not menu_defs:
+            continue
+        default_key = sorted(menu_defs, key=str)[0]
+        default_menu = menu_defs.get(default_key) or {}
+
+        def row_dict(row):
+            row = row or {}
+            return {"name": _strip_recipe_code(row.get("nazov") or ""),
+                    "allergens": row.get("alergenyStr") or "",
+                    "weight": row.get("hmotnostiStr") or "",
+                    "number": None, "rating": None}
+
+        menus = [row_dict(r) for r in (default_menu.get("rows") or [])]
+        chooseable_menus = [
+            {"title": md.get("nazovMenu"),
+             "foods": [_strip_recipe_code(r.get("nazov") or "")
+                       for r in (md.get("rows") or [])]}
+            for key, md in menu_defs.items()
+            if key != default_key and isinstance(md, dict)
+        ]
+        result[slot] = {
+            "served_from": item.get("vydaj_od"),
+            "served_to": item.get("vydaj_do"),
+            "amount_of_foods": len(menus),
+            "chooseable_menus": chooseable_menus,
+            "can_be_changed_until": item.get("prihlas_do"),
+            "title": _strip_recipe_code(item.get("nazov") or ""),
+            "menus": menus,
+            "date": day.isoformat(),
+            "ordered_meal": None,
+            "meal_type": idx,
+        }
+    return result
+
+
+def _meals_payload(client, d, sub, include_breakfast=False, include_dinner=False):
+    """Meal menu payload for a date: personal ordering endpoint first, then the
+    school's public canteen widget. Returns a dict keyed by meal slot -> plain
+    meal dict (or None). Pure function usable by both get_meals and
+    get_day_summary."""
+    meals = None
+    try:
+        meals = client.get_meals(d)
+    except (edupage_exceptions.InvalidMealsData, IndexError, AttributeError, KeyError, TypeError):
+        meals = None
+    except edupage_exceptions.ExpiredSessionException:
+        if _relogin_subdomain(sub):
+            client = _require_client(sub)
+            meals = client.get_meals(d)
+        else:
+            raise
+    if meals is None or not any(getattr(meals, m) for m in ("snack", "lunch", "afternoon_snack")):
+        for fetch in (_fetch_canteen_menu, _fetch_novylistok):
+            extra = fetch(client, d)
+            if extra is None:
+                continue
+            meals_data = {k: extra[k] for k in ("snack", "lunch", "afternoon_snack")}
+            if include_breakfast or include_dinner:
+                meals_data["breakfast"] = extra.get("breakfast") if include_breakfast else None
+                meals_data["dinner"] = extra.get("dinner") if include_dinner else None
+            return meals_data
+    meals_data = _serialize(meals) if meals is not None else None
+    if include_breakfast or include_dinner:
+        if meals_data is None:
+            meals_data = {k: None for k in ("snack", "lunch", "afternoon_snack")}
+        meals_data["breakfast"] = None if include_breakfast else meals_data.get("breakfast")
+        meals_data["dinner"] = None if include_dinner else meals_data.get("dinner")
+    return meals_data
+
+
 @_tool
 def get_meals(date_str: str = None, include_breakfast: bool = False,
               include_dinner: bool = False, subdomain: str = None) -> dict:
@@ -1191,32 +1324,8 @@ def get_meals(date_str: str = None, include_breakfast: bool = False,
         client = _require_client(subdomain)
         d = _parse_date(date_str)
         sub = _resolve_subdomain(subdomain)
-        meals = None
-        try:
-            meals = client.get_meals(d)
-        except (edupage_exceptions.InvalidMealsData, IndexError, AttributeError, KeyError, TypeError):
-            meals = None
-        except edupage_exceptions.ExpiredSessionException:
-            if _relogin_subdomain(sub):
-                client = _require_client(sub)
-                meals = client.get_meals(d)
-            else:
-                raise
-        if meals is None or not any(getattr(meals, m) for m in ("snack", "lunch", "afternoon_snack")):
-            canteen = _fetch_canteen_menu(client, d)
-            if canteen is not None:
-                meals_data = {k: canteen[k] for k in ("snack", "lunch", "afternoon_snack")}
-                if include_breakfast or include_dinner:
-                    meals_data["breakfast"] = canteen.get("breakfast") if include_breakfast else None
-                    meals_data["dinner"] = canteen.get("dinner") if include_dinner else None
-                return {"date": d.isoformat(), "subdomain": sub, "meals": meals_data}
-        meals_data = _serialize(meals) if meals is not None else None
-        if include_breakfast or include_dinner:
-            if meals_data is None:
-                meals_data = {k: None for k in ("snack", "lunch", "afternoon_snack")}
-            meals_data["breakfast"] = None if include_breakfast else meals_data.get("breakfast")
-            meals_data["dinner"] = None if include_dinner else meals_data.get("dinner")
-        return {"date": d.isoformat(), "subdomain": sub, "meals": meals_data}
+        return {"date": d.isoformat(), "subdomain": sub,
+                "meals": _meals_payload(client, d, sub, include_breakfast, include_dinner)}
 
     return _run(go, "get_meals")
 
@@ -1277,6 +1386,127 @@ def rate_meal(date_str: str, meal_type: str, quality: int, quantity: int, subdom
         return {"rated": True, "meal_type": meal_type, "date": d.isoformat()}
 
     return _run(go, "rate_meal")
+
+
+# --------------------------------------------------------------------------
+# Day summary (composite report)
+# --------------------------------------------------------------------------
+# get_day_summary assembles the per-section tools into one call so an agent can
+# answer "what happened yesterday at school / what's coming tomorrow" without
+# firing 8-10 separate tools. Each section is isolated: a failure in one
+# section (e.g. no gradebook, no timeline access) yields {"ok": false, ...}
+# without failing the whole report.
+_HOMEWORK_TYPES = {EventType.HOMEWORK, EventType.HOMEWORK_STUDENT_STATE}
+_EXAM_TYPES = {
+    EventType.BIG_EXAM, EventType.HOMEWORK, EventType.ORAL_EXAM,
+    EventType.PAPER, EventType.PROJECT_EXAM, EventType.SHORT_EXAM,
+    EventType.TESTING, EventType.HOMEWORK_STUDENT_STATE,
+    EventType.EXAM_ASSIGNMENT, EventType.EXAM_EVALUATION,
+    EventType.TEST_RESULT,
+}
+_ABSENCE_TYPES = {EventType.STUDENT_ABSENT, EventType.EXCUSED_LESSON, EventType.REPRESENTATION}
+_EVENT_TYPES = {
+    EventType.EVENT, EventType.SCHOOL_EVENT, EventType.EXCURSION,
+    EventType.SCHOOL_TRIP, EventType.PARENTS_EVENING, EventType.TEACHER_MEETING,
+    EventType.CULTURE, EventType.FREE_DAY, EventType.HOLIDAY, EventType.SHORT_HOLIDAY,
+    EventType.SCHOOL_TEACHER_EVENT if hasattr(EventType, "SCHOOL_TEACHER_EVENT") else None,
+}
+_EVENT_TYPES.discard(None)
+
+
+def _timeline_on_day(client, d, types):
+    """Timeline notifications whose timestamp falls on date `d`, optionally
+    restricted to a set of event types (None = all types)."""
+    events = client.get_notifications() or []
+    result = []
+    for e in events:
+        ts = getattr(e, "timestamp", None)
+        if ts is None or ts.date() != d:
+            continue
+        if types is not None and e.event_type not in types:
+            continue
+        result.append(_serialize(e))
+    return result
+
+
+def _my_timetable_lessons(client, d):
+    try:
+        tt = client.get_my_timetable(d)
+    except (IndexError, KeyError, AttributeError, TypeError):
+        tt = None
+    return [_serialize(ls) for ls in tt.lessons] if tt else []
+
+
+def _grades_on_day(client, d):
+    grades = client.get_grades() or []
+    received = [g for g in grades if (getattr(g, "date", None) or datetime.min).date() == d]
+    return {"received": [_serialize(g) for g in received], "total_in_period": len(grades)}
+
+
+@_tool
+def get_day_summary(date_str: str = None, name: str = None, student_id: str = None,
+                    subdomain: str = None) -> dict:
+    """One-call daily school report for a date (default today): timetable,
+    substitutions, missing teachers, grades received that day, meals, homework,
+    assignments, absences, news, events, and timeline notifications.
+
+    Composes the individual section tools so you don't need to fire 8-10 calls
+    to answer "what happened yesterday at school" or "what's coming tomorrow".
+    Like get_student_timetable: pass `name`/`student_id` for a specific student
+    (role-aware, cross-school search when no subdomain is given), or omit them
+    to report on the logged-in account. Every section is isolated — a failure in
+    one section yields {\"ok\": false, \"error\": ...} without failing the report."""
+    def go():
+        d = _parse_date(date_str)
+        if subdomain:
+            subs = [_resolve_subdomain(subdomain)]
+        else:
+            subs = [s for s, c in _clients.items() if c is not None and c.is_logged_in]
+            if not subs:
+                raise RuntimeError("Not logged in to any school. Set EDUPAGE_SUBDOMAINS (or call `login_all`) first.")
+        student_query = name or student_id
+        schools_out = []
+        for sub in subs:
+            client = _require_client(sub)
+            result = {"subdomain": sub, "date": d.isoformat(), "sections": {}}
+
+            def run_section(key, fn):
+                try:
+                    result["sections"][key] = {"ok": True, **fn()}
+                except Exception as e:  # noqa: BLE001
+                    result["sections"][key] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+            if student_query:
+                try:
+                    r = _student_timetable_at(client, sub, name, student_id, d)
+                except Exception:  # noqa: BLE001 - school can't resolve student; skip it
+                    r = None
+                if r is None:
+                    continue
+                result["student"] = {"name": r["student"], "student_id": r["student_id"],
+                                     "class_id": r["class_id"]}
+                run_section("timetable", lambda r=r: {"lessons": r["lessons"]})
+            else:
+                run_section("timetable", lambda: {"lessons": _my_timetable_lessons(client, d)})
+
+            run_section("substitutions", lambda: {"changes": _get_changes_for(client, sub, d)})
+            run_section("missing_teachers", lambda: {
+                "teachers": [_serialize(t) for t in (client.get_missing_teachers(d) or [])]})
+            run_section("grades", lambda: _grades_on_day(client, d))
+            run_section("meals", lambda: {"meals": _meals_payload(client, d, sub)})
+            run_section("homework", lambda: {"homework": _timeline_on_day(client, d, _HOMEWORK_TYPES)})
+            run_section("assignments", lambda: {"assignments": _timeline_on_day(client, d, _EXAM_TYPES)})
+            run_section("absences", lambda: {"absences": _timeline_on_day(client, d, _ABSENCE_TYPES)})
+            run_section("news", lambda: {"news": _timeline_on_day(client, d, {EventType.NEWS})})
+            run_section("events", lambda: {"events": _timeline_on_day(client, d, _EVENT_TYPES)})
+            run_section("notifications", lambda: {"notifications": _timeline_on_day(client, d, None)})
+            schools_out.append(result)
+        if not schools_out:
+            raise RuntimeError(f"No data found for {student_query or 'logged-in account'} on {d.isoformat()}.")
+        return {"date": d.isoformat(), "student_query": student_query or None,
+                "results": schools_out}
+
+    return _run(go, "get_day_summary")
 
 
 # --------------------------------------------------------------------------

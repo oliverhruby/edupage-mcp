@@ -95,7 +95,7 @@ This project deliberately goes further:
 
 ## What it provides
 
-A single stdio MCP server exposing **44 tools** (published on PyPI as
+A single stdio MCP server exposing **46 tools** (published on PyPI as
 [`edupage-mcp-full`](https://pypi.org/project/edupage-mcp-full/)):
 
 - **Authentication** — `login`, `login_auto`, `login_all`, `login_from_session`,
@@ -114,6 +114,12 @@ A single stdio MCP server exposing **44 tools** (published on PyPI as
   `get_homework`, `get_assignments`, `get_absences`, `get_upcoming_events`, `get_news`
 - **Substitutions** — `get_timetable_changes`, `get_missing_teachers`
 - **Meals** — `get_meals`, `choose_meal`, `sign_off_meal`, `rate_meal`
+- **Day summaries** — `get_day_summary` (one call: timetable, substitutions,
+  missing teachers, grades, meals, homework, assignments, absences, news,
+  events, notifications for a date — "what happened yesterday at school" in a
+  single round trip; each section is isolated so one failure doesn't kill the
+  report). Bundles an OpenCode skill (`school-day-summary`) for turning it
+  into a human-readable daily report; see [Skills](#skills).
 - **Rosters** — `get_students`, `get_all_students`, `get_teachers`, `get_classes`,
   `get_classrooms`, `get_subjects`, `get_my_students`
 - **Actions** — `send_message`, `switch_to_student`, `switch_to_parent`, `custom_request`
@@ -392,6 +398,7 @@ fully automatic.
 | `get_news` | School news |  |
 | `get_timetable_changes` | Substitutions / timetable changes for a date |  |
 | `get_missing_teachers` | Teachers missing on a date |  |
+| `get_day_summary` | One-call daily report (timetable, substitutions, teachers, grades, meals, homework, assignments, absences, news, events, notifications) for a date; student by name/id (role-aware) |  |
 | `get_meals` | Meal menu (snack/lunch/afternoon snack; `include_breakfast`/`include_dinner` add extras) |  |
 | `choose_meal` | Order a meal | ✅ |
 | `sign_off_meal` | Cancel an ordered meal | ✅ |
@@ -430,6 +437,29 @@ fully automatic.
   school's **public canteen menu widget** (`/menu/?wid=menu_CanteenMenu_1`),
   which is read-only (no ordering) and may include extra meals — pass
   `include_breakfast=true` / `include_dinner=true` to also get Raňajky/Večera.
+
+---
+
+## Skills
+
+The package ships an **OpenCode skill** (`school-day-summary`) with the wheel at
+`<site-packages>/edupage_mcp/skills/school-day-summary/SKILL.md`. It teaches an
+agent how to turn `get_day_summary` into a human-readable daily school report.
+
+To register it with OpenCode, either:
+
+- copy it to OpenCode's global skills dir:
+  ```bash
+  mkdir -p ~/.config/opencode/skills/school-day-summary
+  cp <site-packages>/edupage_mcp/skills/school-day-summary/SKILL.md \
+     ~/.config/opencode/skills/school-day-summary/SKILL.md
+  ```
+- or point an agent at the skill file in site-packages.
+
+Restart OpenCode after installing so the skill is loaded; the agent can then
+answer prompts like *"what happened at school yesterday for my kids?"* by making
+a single `get_day_summary` call per child (falling back to individual tools if a
+section fails).
 
 ---
 
