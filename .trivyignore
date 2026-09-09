@@ -11,3 +11,19 @@
 # Re-evaluate on Trivy DB updates. Target removal: 2026-12-31.
 GHSA-6v7p-g79w-8964
 CVE-2025-47273
+
+# libuuid / util-linux CVEs in alpine base image — resolve on next base image bump.
+# https://avd.aquasec.com/nvd/cve-2026-53612
+# https://avd.aquasec.com/nvd/cve-2026-53613
+# https://avd.aquasec.com/nvd/cve-2026-53614
+# https://avd.aquasec.com/nvd/cve-2026-76642
+# https://avd.aquasec.com/nvd/cve-2026-78408
+# https://avd.aquasec.com/nvd/cve-2026-78409
+# https://avd.aquasec.com/nvd/cve-2026-78410
+CVE-2026-53612
+CVE-2026-53613
+CVE-2026-53614
+CVE-2026-76642
+CVE-2026-78408
+CVE-2026-78409
+CVE-2026-78410
