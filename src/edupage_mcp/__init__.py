@@ -1073,6 +1073,22 @@ def _get_changes_for(client, sub, d):
     return [_serialize(c) for c in changes] if changes is not None else []
 
 
+def _get_missing_teachers_for(client, sub, d):
+    """Missing teachers for a date, with re-login handling."""
+    try:
+        teachers = client.get_missing_teachers(d)
+    except edupage_exceptions.ExpiredSessionException:
+        if not _relogin_subdomain(sub):
+            teachers = []
+        else:
+            client = _require_client(sub)
+            try:
+                teachers = client.get_missing_teachers(d)
+            except edupage_exceptions.ExpiredSessionException:
+                teachers = []
+    return [_serialize(t) for t in teachers or []]
+
+
 @_tool
 def get_timetable_changes(date_str: str = None, subdomain: str = None) -> dict:
     """Get substitution/timetable changes for a date (default today)."""
@@ -1091,9 +1107,9 @@ def get_missing_teachers(date_str: str = None, subdomain: str = None) -> dict:
     def go():
         client = _require_client(subdomain)
         d = _parse_date(date_str)
-        teachers = client.get_missing_teachers(d)
-        return {"date": d.isoformat(), "subdomain": _resolve_subdomain(subdomain),
-                "teachers": [_serialize(t) for t in teachers or []]}
+        sub = _resolve_subdomain(subdomain)
+        return {"date": d.isoformat(), "subdomain": sub,
+                "teachers": _get_missing_teachers_for(client, sub, d)}
 
     return _run(go, "get_missing_teachers")
 
@@ -1491,7 +1507,7 @@ def get_day_summary(date_str: str = None, name: str = None, student_id: str = No
 
             run_section("substitutions", lambda: {"changes": _get_changes_for(client, sub, d)})
             run_section("missing_teachers", lambda: {
-                "teachers": [_serialize(t) for t in (client.get_missing_teachers(d) or [])]})
+                "teachers": _get_missing_teachers_for(client, sub, d)})
             run_section("grades", lambda: _grades_on_day(client, d))
             run_section("meals", lambda: {"meals": _meals_payload(client, d, sub)})
             run_section("homework", lambda: {"homework": _timeline_on_day(client, d, _HOMEWORK_TYPES)})
