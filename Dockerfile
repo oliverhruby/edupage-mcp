@@ -1,5 +1,7 @@
 FROM python:3.11-alpine
 
+LABEL io.modelcontextprotocol.server.name="io.github.oliverhruby/edupage-mcp"
+
 RUN apk upgrade --no-cache
 
 WORKDIR /app

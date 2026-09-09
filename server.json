@@ -1,0 +1,49 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.oliverhruby/edupage-mcp",
+  "title": "EduPage MCP Server",
+  "description": "Full-feature EduPage MCP server with timetables, grades, homework, meals, messages, 2FA, multi-school discovery, and role-aware tools.",
+  "version": "0.4.4",
+  "websiteUrl": "https://github.com/oliverhruby/edupage-mcp",
+  "repository": {
+    "url": "https://github.com/oliverhruby/edupage-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "edupage-mcp-full",
+      "version": "0.4.4",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "uvx",
+      "environmentVariables": [
+        {
+          "name": "EDUPAGE_USERNAME",
+          "description": "Your EduPage username",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "EDUPAGE_PASSWORD",
+          "description": "Your EduPage password",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "EDUPAGE_SUBDOMAINS",
+          "description": "Comma-separated list of school subdomains for multi-school access (optional)",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://ghcr.io/oliverhruby/edupage-mcp:latest"
+    }
+  ]
+}

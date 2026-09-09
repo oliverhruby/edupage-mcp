@@ -1,5 +1,7 @@
 # EduPage MCP Server
 
+<!-- mcp-name: io.github.oliverhruby/edupage-mcp -->
+
 [![GitHub release](https://img.shields.io/github/v/release/oliverhruby/edupage-mcp.svg?label=release)](https://github.com/oliverhruby/edupage-mcp/releases)
 [![Quality gates](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/quality-gates.yml.svg?label=quality%20gates)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/quality-gates.yml)
 [![Security](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/security.yml.svg?label=security)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/security.yml)
@@ -137,7 +139,13 @@ started, for example: "Install the EduPage MCP as described in this GitHub
 repository oliverhruby/edupage-mcp". Most MCP-capable clients can then guide
 you through the available setup options.
 
-**Option A — from PyPI (recommended)**
+**Option A — from MCP Registry (recommended, one-click in VS Code / GitHub Copilot)**
+
+The server is listed in the [MCP Registry](https://registry.modelcontextprotocol.io/).
+In VS Code or GitHub Copilot, search for "EduPage MCP" and install with one click.
+Or use the direct deeplink: `mcp://install/io.github.oliverhruby/edupage-mcp`
+
+**Option B — from PyPI**
 
 Use this for normal usage with a released version.
 
@@ -152,7 +160,7 @@ pip install edupage-mcp-full
 `uvx` runs the package without a persistent install. If `uvx` is unavailable,
 install `uv` first (`pip install uv` or `winget install astral-sh.uv`).
 
-**Option B — from GitHub (latest source)**
+**Option C — from GitHub (latest source)**
 
 Use this if you want the latest changes before a PyPI release.
 
@@ -163,6 +171,57 @@ uvx --from "git+https://github.com/oliverhruby/edupage-mcp.git" edupage-mcp-full
 # or
 pip install "git+https://github.com/oliverhruby/edupage-mcp.git"
 ```
+
+**Option D — Docker**
+
+Use this for an isolated container runtime.
+
+Requirements: Docker.
+
+Pull a prebuilt image (recommended):
+
+```bash
+docker pull ghcr.io/oliverhruby/edupage-mcp:latest
+
+docker run --rm -i \
+  -e EDUPAGE_USERNAME=your_username \
+  -e EDUPAGE_PASSWORD=your_password \
+  ghcr.io/oliverhruby/edupage-mcp:latest
+```
+
+Version tags are also available (for example `v0.4.0`) if you prefer pinned
+images.
+
+Build locally from source (fallback):
+
+```bash
+docker build -t edupage-mcp-full .
+
+docker run --rm -i \
+  -e EDUPAGE_USERNAME=your_username \
+  -e EDUPAGE_PASSWORD=your_password \
+  edupage-mcp-full
+```
+
+The container uses the same environment variables described in
+[Configure credentials](#2-configure-credentials). It also includes a
+`HEALTHCHECK` (stdio process liveness by default; local TCP check in HTTP
+transport modes).
+
+For HTTP transports, set optional runtime vars:
+
+- `MCP_TRANSPORT`: `stdio` (default), `sse`, or `streamable-http`
+- `MCP_HOST`: bind host (default `127.0.0.1`)
+- `MCP_PORT`: bind port (default `8000`)
+- `MCP_API_KEY`: optional bearer token for HTTP auth
+
+When `MCP_API_KEY` is set, HTTP requests must include `Authorization: Bearer <key>`.
+If `MCP_API_KEY` is not set, HTTP endpoints are unauthenticated. For production,
+prefer proper authentication and TLS via a reverse proxy or API gateway.
+
+> `pyproject.toml` pins `mcp<2` (the stable FastMCP v1 API). `mcp 2.x` renamed
+> `FastMCP` to `MCPServer` and changed the API surface; this server targets the
+> FastMCP v1 API for simplicity and stability.
 
 **Option C — development from source**
 
