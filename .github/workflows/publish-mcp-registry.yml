@@ -63,17 +63,8 @@ jobs:
       - name: Validate server.json
         run: mcp-publisher validate server.json
 
-      - name: Get OIDC token for MCP Registry
-        id: oidc
-        uses: actions/id-token-request@v2
-        with:
-          audience: "https://registry.modelcontextprotocol.io"
-
       - name: Login to MCP Registry (GitHub OIDC)
-        run: mcp-publisher login github --token "${{ steps.oidc.outputs.token }}"
-        env:
-          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${{ steps.oidc.outputs.token }}
-          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
+        run: mcp-publisher login github
 
       - name: Publish to MCP Registry
         run: mcp-publisher publish server.json
