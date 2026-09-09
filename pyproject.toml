@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "edupage-mcp-full"
-version = "0.4.4"
+version = "0.4.5"
 description = "Full-feature EduPage MCP server: timetables, grades, homework, meals (ordering), messages, role-aware student switching, 2FA, multi-school with automatic student discovery, tiered name matching, and student cache."
 readme = "README.md"
 license = { text = "MIT" }
@@ -27,6 +27,7 @@ dependencies = [
     "mcp<2",
     "edupage-api>=0.12.3",
 ]
+mcpName = "io.github.oliverhruby/edupage-mcp"
 
 [project.urls]
 Homepage = "https://github.com/oliverhruby/edupage-mcp"
