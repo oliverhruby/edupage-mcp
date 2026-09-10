@@ -78,13 +78,14 @@ This project deliberately goes further:
 | Raw session **custom request** | ❌ | ❌ | ✅ |
 | **Multiple schools** (auto-login + discovery) | ❌ | ❌ | ✅ |
 | **Role-aware** (parent / student / teacher) | ❌ | ❌ | ✅ |
+| **Day summaries** (one-call daily report) | ❌ | ❌ | ✅ |
 
 **Key differentiators:**
 
 - **Multi-school automatic discovery.** Set `EDUPAGE_SUBDOMAINS` with one shared
   login and the server auto-discovers students across all schools — no need to
-  maintain a manual "Viktor → school A, Tamara → school B" mapping. A student at
-  two schools (e.g. Tamara at `iprskola` + `cvcmalacky`) is found automatically
+  maintain a manual "Student → school1, Student → school2" mapping. A student at
+  two schools (e.g. Student at `school1` + `school2`) is found automatically
   with separate per-school results.
 - **Role-aware tools.** The server detects whether you're a parent, student, or
   teacher at each school and behaves accordingly — `get_student_timetable`
@@ -120,8 +121,8 @@ A single stdio MCP server exposing **46 tools** (published on PyPI as
   missing teachers, grades, meals, homework, assignments, absences, news,
   events, notifications for a date — "what happened yesterday at school" in a
   single round trip; each section is isolated so one failure doesn't kill the
-  report). Bundles an OpenCode skill (`school-day-summary`) for turning it
-  into a human-readable daily report; see [Skills](#skills).
+  report). Includes an OpenCode skill (`school-day-summary`) for human-readable
+  formatting in OpenCode; other clients use the raw JSON directly.
 - **Rosters** — `get_students`, `get_all_students`, `get_teachers`, `get_classes`,
   `get_classrooms`, `get_subjects`, `get_my_students`
 - **Actions** — `send_message`, `switch_to_student`, `switch_to_parent`, `custom_request`
@@ -354,8 +355,10 @@ After editing client config, **restart the client** so the MCP server is loaded.
 | "What grades do I have this term?" | `get_grades term="FIRST" year=2026` | Subject-by-subject grade overview for the selected term/year. |
 | "Any substitutions today?" | `get_timetable_changes` | Changes, cancellations, and replacements for today. |
 | "What is for lunch and order option 2 for tomorrow" | `get_meals` → `choose_meal date_str="2026-09-10" meal_type="lunch" number=2` | Meal menu and order confirmation (or a clear error if unavailable). |
-| "Find Viktor's timetable for tomorrow" | `get_student_timetable name="Viktor" date_str="2026-09-10"` | Viktor's timetable; if found in multiple schools, one result per school. |
+| "Find Student A's timetable for tomorrow" | `get_student_timetable name="Student A" date_str="2026-09-10"` | Student A's timetable; if found in multiple schools, one result per school. |
 | "List teachers and send a hello to Teacher456" | `get_teachers` → `send_message recipient_id="Teacher456" body="Hello!"` | Teacher list plus message sent confirmation. |
+| **"What happened at school yesterday for my kids?"** | `get_day_summary date_str="2026-09-09" name="Student A"` → `get_day_summary date_str="2026-09-09" name="Student B"` | **Complete daily report per child**: timetable, substitutions, missing teachers, grades received, meals, homework, assignments, absences, news, events, and notifications — all in one call per student. |
+| **"How was school today for Student A?"** | `get_day_summary name="Student A"` (defaults to today) | Human-readable summary via the bundled OpenCode skill `school-day-summary`. |
 
 ---
 
@@ -371,14 +374,14 @@ ready and students are discoverable across all schools with **no login call and
 no student→school mapping**:
 
 ```bash
-setx EDUPAGE_SUBDOMAINS "zssturovamalacky,iprskola,cvcmalacky"   # Windows
-export EDUPAGE_SUBDOMAINS="zssturovamalacky,iprskola,cvcmalacky" # macOS / Linux
+setx EDUPAGE_SUBDOMAINS "school1,school2,school3"   # Windows
+export EDUPAGE_SUBDOMAINS="school1,school2,school3" # macOS / Linux
 ```
 
 ```text
-get_schools        # lists zssturovamalacky, iprskola, cvcmalacky (logged in, with role)
-scan_students      # discovers Viktor and Tamara across those schools
-get_student_timetable name="Tamara"   # is found at iprskola AND cvcmalacky
+get_schools        # lists school1, school2, school3 (logged in, with role)
+scan_students      # discovers Student A and Student B across those schools
+get_student_timetable name="Student A"   # is found at school1 AND school2
 ```
 
 **B) On demand with `login_all`.** Authenticate several schools at once, then pass
@@ -386,10 +389,10 @@ get_student_timetable name="Tamara"   # is found at iprskola AND cvcmalacky
 omitted):
 
 ```text
-login_all subdomains="zssturovamalacky,iprskola" usernames="u1,u2" passwords="p1,p2"
+login_all subdomains="school1,school2" usernames="u1,u2" passwords="p1,p2"
 
-get_my_timetable subdomain="zssturovamalacky"
-get_my_timetable subdomain="iprskola"
+get_my_timetable subdomain="school1"
+get_my_timetable subdomain="school2"
 auth_status          # shows all logged-in subdomains + which is active
 ```
 
@@ -401,14 +404,14 @@ You can also call `login` once per school to add/lookup sessions incrementally.
 
 ---
 
-## Students by name (e.g. "timetable for Viktor")
+## Students by name (e.g. "timetable for Student A")
 
 Because the server **auto-discovers students across all logged-in schools**, you
 don't need to know or state which school a student is in. Just ask for the
 timetable by name and the server searches every school it's logged into:
 
 ```text
-"timetable for Viktor"  ->  get_student_timetable name="Viktor"
+"timetable for Student A"  ->  get_student_timetable name="Student A"
 ```
 
 `get_student_timetable` (with no `subdomain`):
@@ -420,10 +423,10 @@ timetable by name and the server searches every school it's logged into:
    switches back to the parent account afterwards,
 3. returns **one result per school**.
 
-A student attending **more than one school** (e.g. Tamara at `iprskola` +
-`cvcmalacky`) therefore yields a list of two per-school timetables — separate
+A student attending **more than one school** (e.g. Student at `school1` +
+`school2`) therefore yields a list of two per-school timetables — separate
 results, never merged. This is the built-in replacement for maintaining a
-manual "Viktor → zsskola1" mapping: with `EDUPAGE_SUBDOMAINS` set, discovery is
+manual "Student → school1" mapping: with `EDUPAGE_SUBDOMAINS` set, discovery is
 fully automatic.
 
 ---
@@ -457,7 +460,7 @@ fully automatic.
 | `get_news` | School news |  |
 | `get_timetable_changes` | Substitutions / timetable changes for a date |  |
 | `get_missing_teachers` | Teachers missing on a date |  |
-| `get_day_summary` | One-call daily report (timetable, substitutions, teachers, grades, meals, homework, assignments, absences, news, events, notifications) for a date; student by name/id (role-aware) |  |
+| `get_day_summary` | One-call daily report (timetable, substitutions, teachers, grades, meals, homework, assignments, absences, news, events, notifications) for a date; student by name/id (role-aware). Bundles OpenCode skill `school-day-summary` for human-readable output. |  |
 | `get_meals` | Meal menu (snack/lunch/afternoon snack; `include_breakfast`/`include_dinner` add extras) |  |
 | `choose_meal` | Order a meal | ✅ |
 | `sign_off_meal` | Cancel an ordered meal | ✅ |
@@ -501,24 +504,23 @@ fully automatic.
 
 ## Skills
 
-The package ships an **OpenCode skill** (`school-day-summary`) with the wheel at
-`<site-packages>/edupage_mcp/skills/school-day-summary/SKILL.md`. It teaches an
-agent how to turn `get_day_summary` into a human-readable daily school report.
+The package includes an **OpenCode skill** (`school-day-summary`) at
+`<site-packages>/edupage_mcp/skills/school-day-summary/SKILL.md`. It teaches
+OpenCode agents how to turn `get_day_summary` JSON into a human-readable daily
+school report.
 
-To register it with OpenCode, either:
+**OpenCode only:** To register it:
+```bash
+mkdir -p ~/.config/opencode/skills/school-day-summary
+cp <site-packages>/edupage_mcp/skills/school-day-summary/SKILL.md \
+   ~/.config/opencode/skills/school-day-summary/SKILL.md
+```
+Restart OpenCode; the agent can then answer *"what happened at school yesterday
+for my kids?"* by calling `get_day_summary` per child.
 
-- copy it to OpenCode's global skills dir:
-  ```bash
-  mkdir -p ~/.config/opencode/skills/school-day-summary
-  cp <site-packages>/edupage_mcp/skills/school-day-summary/SKILL.md \
-     ~/.config/opencode/skills/school-day-summary/SKILL.md
-  ```
-- or point an agent at the skill file in site-packages.
-
-Restart OpenCode after installing so the skill is loaded; the agent can then
-answer prompts like *"what happened at school yesterday for my kids?"* by making
-a single `get_day_summary` call per child (falling back to individual tools if a
-section fails).
+**Other MCP clients (Copilot, Claude, Cursor, etc.)** — call `get_day_summary`
+directly; they receive the full structured JSON. Formatting is client-specific
+(no skill system in the MCP protocol).
 
 ---
 

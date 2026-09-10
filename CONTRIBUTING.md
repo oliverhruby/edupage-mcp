@@ -85,6 +85,7 @@ Version source of truth is `pyproject.toml`.
 - PyPI publish: [.github/workflows/publish.yml](.github/workflows/publish.yml) (OIDC trusted publishing)
 - GitHub release notes: [.github/workflows/release.yml](.github/workflows/release.yml) (auto-generated)
 - GHCR image publish: [.github/workflows/publish-container.yml](.github/workflows/publish-container.yml)
+- MCP Registry publish: [.github/workflows/publish-mcp-registry.yml](.github/workflows/publish-mcp-registry.yml) (OIDC login + mcp-publisher)
 
 Ensure tag version matches `pyproject.toml` version.
 
@@ -102,6 +103,8 @@ They are defined in the corresponding GitHub Actions workflow files linked below
 - **[container-security / trivy-image](.github/workflows/container-security.yml)** – builds the Docker image and runs Trivy vulnerability scanning. The job fails on HIGH or CRITICAL findings, helping keep the image secure.
 
 - **[upstream-coverage / coverage-drift](.github/workflows/upstream-coverage.yml)** – checks that every public `edupage-api` method is either wrapped by a call in `src/edupage_mcp/__init__.py` or explicitly listed in `scripts/edupage_api_ignored_methods.json` with a reason. It also runs a canary request against the latest `edupage-api` to catch drift.
+
+- **[publish-mcp-registry](.github/workflows/publish-mcp-registry.yml)** – validates `server.json` against the MCP Registry schema and publishes server metadata on tag push (runs after PyPI/Docker publish).
 
 ## Upstream coverage drift check
 
