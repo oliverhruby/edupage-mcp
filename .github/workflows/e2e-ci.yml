@@ -1,7 +1,14 @@
 name: e2e-live
 
-# Live integration suite against the real EduPage schools. Runs on the "every
-# day" cadence plus a manual trigger; it is NOT run on push/PR.
+# Live integration suite against the real EduPage schools. Manual-only
+# (workflow_dispatch); never on push/PR.
+#
+# STATUS: GitHub-hosted runners cannot reach EduPage — edupage.org is
+# network-unreachable from Azure-hosted runners (curl probe -> HTTP 000,
+# login -> "Errno 101 Network is unreachable"; confirmed 2026-09-10). The live
+# suite requires a self-hosted runner with home/mobile-ISP egress. Until one is
+# available, run the suite locally via run_e2e.ps1. On future hosted runners,
+# re-enable the curl probe below as a precondition and the daily schedule.
 #
 # PRIVACY DESIGN (public repo):
 #   - No credentials in the repo: only the EDUPAGE_USERNAME / EDUPAGE_PASSWORD
@@ -18,9 +25,6 @@ name: e2e-live
 
 on:
   workflow_dispatch:
-  schedule:
-    # Daily at 04:23 UTC (quiet hour).
-    - cron: "23 4 * * *"
 
 concurrency:
   group: e2e-live
