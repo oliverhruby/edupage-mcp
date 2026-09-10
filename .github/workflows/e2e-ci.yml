@@ -59,5 +59,12 @@ jobs:
       - name: Install
         run: pip install -e . pytest
 
+      - name: Check EduPage reachability
+        run: |
+          for sub in zssturovamalacky iprskola; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://$sub.edupage.org/login/" || echo "ERR")
+            echo "$sub -> HTTP $code"
+          done
+
       - name: Run live e2e suite
         run: pytest -m e2e tests/e2e -q --no-header
