@@ -191,9 +191,13 @@ powershell -ExecutionPolicy Bypass -File run_e2e.ps1     # local runner
 
 ### CI run (option 3 — zero-data, public-safe)
 
-`.github/workflows/e2e-ci.yml` runs the same suite **daily (04:23 UTC) and on
-manual `workflow_dispatch`** on a GitHub runner (never on push/PR). Privacy is
-enforced by design, not by log masking:
+`.github/workflows/e2e-ci.yml` runs the same suite **on manual
+`workflow_dispatch` only** (never on push/PR). It is currently **dormant**:
+GitHub-hosted runners cannot reach `edupage.org` (HTTP 000 / `Errno 101 Network
+is unreachable`, confirmed 2026-09-10), so the live suite needs a **self-hosted
+runner** with home-ISP egress — until one is registered, use the **local
+`run_e2e.ps1`** path below as the verification path. Privacy is enforced by
+design, not by log masking:
 
 - Credentials come only from `EDUPAGE_USERNAME` / `EDUPAGE_PASSWORD` **secrets**
   (injected via env; masked in logs). No credentials are in the repo.
