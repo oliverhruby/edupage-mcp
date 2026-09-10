@@ -64,6 +64,7 @@ This project deliberately goes further:
 
 | Capability | mhlavac | mrtineu (PyPI) | **this project** |
 |---|---|---|---|
+| **Advanced login** — portal auto-detect, **2FA**, **session id** (`PHPSESSID`) | partial (portal) | basic only | ✅ |
 | Timetables (own + any teacher/class/room) | ✅ | ✅ | ✅ |
 | Grades (all / by term & year) | ✅ | ✅ | ✅ |
 | Substitutions / timetable changes | ✅ | ✅ | ✅ |
@@ -71,7 +72,6 @@ This project deliberately goes further:
 | Meals — **choose / sign-off / rate** | ❌ | ❌ | ✅ |
 | Send messages (`send_message`) | ✅ | ❌ | ✅ |
 | Parent **student switching** (switch to/from student) | partial (list) | ❌ | ✅ |
-| **Advanced login** — portal auto-detect, **2FA**, **session id** (`PHPSESSID`) | partial (portal) | basic only | ✅ |
 | Next ringing time / bell schedule | ❌ | ❌ | ✅ |
 | Raw session **custom request** | ❌ | ❌ | ✅ |
 | **Multiple schools** (auto-login + discovery) | ❌ | ❌ | ✅ |
