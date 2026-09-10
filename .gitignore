@@ -27,3 +27,8 @@ edupage-venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Live integration test artifacts — these contain real student data and must
+# NEVER be committed or uploaded to public CI.
+reports/
+tests/e2e/.local*

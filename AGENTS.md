@@ -63,8 +63,10 @@ logic. Do not grow a scraping layer here.
 - **Student cache.** `_get_students_cached(client, subdomain)` caches visible
   students keyed by `(subdomain, role)` for `_STUDENT_CACHE_TTL` (5 min) to avoid
   redundant API calls across tools. Cache is cleared on `clear_student_cache`,
-  auto-login, and re-login. Parent accounts use `get_all_students()`; student/
-  teacher use `get_students()`.
+  auto-login, and re-login. Parent accounts get their linked children by parsing
+  the school homepage (`_get_parent_children`), falling back to
+  `get_all_students()` when the homepage exposes no children; student/teacher
+  use `get_students()`.
 - **Tiered name matching.** `_find_student(client, name, subdomain)` matches by
   tier (highest confidence first): full name → first name → last name → short
   name (`name_short`, e.g. `'Novák V.'`). `_find_student_all` returns all
@@ -149,6 +151,7 @@ gh workflow run security.yml --repo oliverhruby/edupage-mcp
 gh workflow run quality-gates.yml --repo oliverhruby/edupage-mcp
 gh workflow run container-security.yml --repo oliverhruby/edupage-mcp
 gh workflow run upstream-coverage.yml --repo oliverhruby/edupage-mcp
+gh workflow run e2e-ci.yml --repo oliverhruby/edupage-mcp   # live e2e (needs secrets)
 ```
 
 ## Build / verify
@@ -162,9 +165,70 @@ python -m py_compile src/edupage_mcp/__init__.py
 python -m edupage_mcp     # then drive an MCP client; tools/list should show all
 ```
 
-There is no test suite; a manual MCP `tools/list` after any addition is the
-verification step. After adding/renaming a tool, update the README "Tool
-reference" table and the tool count in the "What it provides" blurb.
+There is no unit-test suite; a manual MCP `tools/list` after any addition is the
+verification step. There **is** a live integration suite in `tests/e2e/` that
+logs into the real schools with the helper's own EduPage account and exercises
+every read-only tool:
+
+```bash
+powershell -ExecutionPolicy Bypass -File run_e2e.ps1     # local runner
+```
+
+- `run_e2e.ps1` sets `EDUPAGE_E2E=1` and strips `cvcmalacky` from
+  `EDUPAGE_SUBDOMAINS` (only `zssturovamalacky` and `iprskola` are approved).
+- Requires `EDUPAGE_USERNAME`/`EDUPAGE_PASSWORD` of the helper's account; run
+  only on the owner's machine.
+- Read-only by design: conftest monkeypatches `edupage-api` write methods to
+  raise, and `test_manifest.py` partitions every tool so no write-capable tool
+  is ever invoked.
+- Known upstream defects are tracked as `known_error` substrings and **fail the
+  suite if the message changes** (e.g. `find_student` no-such-student,
+  `get_grades` `percent` UnboundLocalError in edupage-api 0.12.5,
+  `get_student_timetable` parent→child path). Fix them in our wrapper or bump
+  upstream when they drift.
+- A drift report is written to `reports/e2e-report.json` (gitignored) with full
+  payload previews — that is the **local** report and stays on the machine.
+
+### CI run (option 3 — zero-data, public-safe)
+
+`.github/workflows/e2e-ci.yml` runs the same suite **daily (04:23 UTC) and on
+manual `workflow_dispatch`** on a GitHub runner (never on push/PR). Privacy is
+enforced by design, not by log masking:
+
+- Credentials come only from `EDUPAGE_USERNAME` / `EDUPAGE_PASSWORD` **secrets**
+  (injected via env; masked in logs). No credentials are in the repo.
+- The workflow sets `EDUPAGE_E2E_CI=1` → the suite switches to **zero-data
+  output**: report entries and assertion messages carry no payload previews, no
+  child ids, no identity text (`in_ci()` in `conftest.py`), so no child data
+  can appear in public job logs even on failure.
+- Child-identity drift is checked against the **one-way sha256 fingerprints** in
+  `tests/e2e/expected_children.fingerprint.json` (`fingerprint.py`): raw names/
+  ids are never committed or printed; a mismatch fails the suite showing only
+  the two hashes.
+- No artifacts are uploaded (artifacts in a public repo are downloadable by
+  anyone) and the report is not published.
+- The write-guard + manifest partition still apply, so the CI run is read-only.
+
+**Regenerating fingerprints** (owner only, never on CI): the exact check needs
+the gitignored `tests/e2e/.local.e2e.json`. When EduPage changes or children
+change legitimately and the fingerprint test fails locally:
+
+1. Confirm the parsed children locally (run the suite with `.local.e2e.json`
+   present to see the full identity diff).
+2. Regenerate with the live generator and commit the new
+   `expected_children.fingerprint.json` — the commit message must not contain
+   child identities.
+
+### Privacy policy (summary)
+
+This repo and its CI are public. Exact child identities (names + person ids)
+must never be committed, printed in CI logs, or uploaded as artifacts. Local
+exact-identity checks read the gitignored `tests/e2e/.local.e2e.json`; the only
+CI-committed evidence is the one-way fingerprint file and a zero-data report.
+
+After adding/renaming a tool, update the README "Tool reference" table, the
+tool count in the "What it provides" blurb, and the `tests/e2e/test_manifest.py`
+partition (and `test_readonly_tools.py` manifest if it should be polled).
 
 ## Publishing (PyPI)
 

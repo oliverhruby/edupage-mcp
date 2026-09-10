@@ -1,0 +1,8 @@
+{
+  "algo": "sha256",
+  "children": {
+    "iprskola": "b5765965df21eb0efeafbe66633621fcc7af8a0fcfcced588d8c23a99d35749c",
+    "zssturovamalacky": "b58952b8ed9384f1611b2b29f1a01f7385116aa957229ae8f5e99d5422ce7a16"
+  },
+  "version": 1
+}
