@@ -148,6 +148,61 @@ def _student_name(student):
     return ""
 
 
+def _resolve_student_full_name(client, subdomain, student):
+    """Return the best available full name for a student.
+    If student has full name, use it. If only short name (initials),
+    search recent timeline notifications for that student_id to find full name."""
+    full = _student_name(student)
+    # Check if it's likely a full name (has space, > 2 parts, not just initials)
+    if full and not _looks_like_initials(full):
+        return full
+    # Only short name/initials - try to enrich from notifications
+    sid = getattr(student, "person_id", None)
+    if sid is None:
+        return full
+    try:
+        events = client.get_notifications() or []
+        for e in events:
+            recipient = getattr(e, "recipient", "") or ""
+            ad = getattr(e, "additional_data", None)
+            # Match by student_id in recipient or additional_data
+            sid_str = str(sid)
+            matched = False
+            if sid_str in recipient:
+                matched = True
+            elif ad and isinstance(ad, dict):
+                for v in ad.values():
+                    if sid_str in str(v):
+                        matched = True
+                        break
+            elif ad and isinstance(ad, list):
+                for v in ad:
+                    if sid_str in str(v):
+                        matched = True
+                        break
+            if matched:
+                # Try to extract name from recipient
+                if recipient and not _looks_like_initials(recipient):
+                    return recipient.strip()
+    except Exception:
+        pass
+    return full
+
+
+def _looks_like_initials(text):
+    """Check if text looks like initials/short name (e.g. 'TH', 'V.H.', 'JH')."""
+    if not text:
+        return True
+    t = text.strip()
+    # All caps, 1-3 chars, possibly with dots
+    if len(t) <= 3 and t.upper() == t and t.replace(".", "").isalpha():
+        return True
+    # Pattern like "V.H." or "V H"
+    if re.match(r"^[A-Z]\.?\s*[A-Z]?\.?$", t):
+        return True
+    return False
+
+
 def _normalize_text(value):
     text = str(value or "").strip().lower()
     if not text:
@@ -177,9 +232,67 @@ def _relogin_subdomain(subdomain):
     return True
 
 
+# EduPage renders a parent's linked children into the school homepage:
+# * ASC.req_props.parent_studentid holds the currently selected child,
+# * `.switchChildBtn` anchors carry every child (data-sid + .userName span).
+_PAT_PARENT_STUDENTID = re.compile(r"""parent_studentid["\s\\]*:\s*["\s\\]*(-?\d+)""")
+_PAT_SWITCH_CHILD_BTN = re.compile(
+    r"""<a[^>]*class="[^"]*switchChildBtn[^"]*"[^>]*data-sid="(-?\d+)"[^>]*>(.*?)</a>""",
+    re.DOTALL,
+)
+_PAT_CHILD_NAME = re.compile(
+    r"""<span[^>]*class="[^"]*userName[^"]*"[^>]*>(.*?)</span>""",
+    re.DOTALL,
+)
+
+
+def _get_parent_children(client, subdomain):
+    """Discover a parent account's linked children by parsing the school homepage.
+
+    EduPage does not expose children through the edupage-api roster methods;
+    it renders them server-side: the currently selected child in
+    ASC.req_props.parent_studentid and every linked child as a
+    `.switchChildBtn` anchor with a data-sid and a `.userName` span.
+
+    Returns a list of SimpleNamespace objects with .person_id, .name and
+    .class_id (None). Returns [] on any failure so callers can fall back.
+    """
+    url = f"https://{subdomain}.edupage.org/"
+    try:
+        resp = client.session.get(url)
+        if resp.status_code != 200:
+            return []
+        page = resp.text
+    except Exception:
+        return []
+
+    children = {}
+    for m in _PAT_SWITCH_CHILD_BTN.finditer(page):
+        sid = int(m.group(1))
+        name = ""
+        name_m = _PAT_CHILD_NAME.search(m.group(2))
+        if name_m:
+            name = html.unescape(re.sub(r"<[^>]+>", "", name_m.group(1))).strip()
+            # Display name looks like "Viktor Hrubý, VII.B" - drop the class suffix.
+            name = re.sub(r",\s*[^,]+$", "", name).rstrip()
+        children.setdefault(sid, SimpleNamespace(person_id=sid, name=name, class_id=None))
+    psid_m = _PAT_PARENT_STUDENTID.search(page)
+    if psid_m:
+        sid = int(psid_m.group(1))
+        children.setdefault(sid, SimpleNamespace(person_id=sid, name="", class_id=None))
+    for child in children.values():
+        if not child.name:
+            child.name = str(child.person_id)
+    return list(children.values())
+
+
 def _get_students_cached(client, subdomain):
     """Get students for a school, using cache to avoid redundant API calls.
-    Returns list of student-like objects with .person_id, .name, .class_id."""
+    Returns list of student-like objects with .person_id, .name, .class_id.
+    For parent accounts, returns the parent's actual children (parsed from the
+    school homepage). Some schools return children with short names (initials),
+    negative IDs, or no children on the homepage - those fall back to the
+    school-wide roster."""
     role = _roles.get(subdomain, "student")
     cache_key = (subdomain, role)
     now = time.time()
@@ -187,41 +300,22 @@ def _get_students_cached(client, subdomain):
     if cached and (now - cached["timestamp"]) < _STUDENT_CACHE_TTL:
         return cached["students"]
     if role == "parent":
-        students = []
-        # Prefer direct children for parent accounts (best names, smallest payload).
-        try:
-            students = client.get_my_children() or []
-        except Exception:
-            students = []
-        # Some schools return short skeleton names only (e.g. initials) even for
-        # parent views; enrich with class roster where possible.
-        if students and not any(_has_full_name(s) for s in students):
-            try:
-                class_students = client.get_students() or []
-            except Exception:
-                class_students = []
-            if class_students:
-                by_id = {str(getattr(s, "person_id", "")): s for s in students}
-                for s in class_students:
-                    by_id[str(getattr(s, "person_id", ""))] = s
-                students = list(by_id.values())
-        # Fallback to school-wide roster if children endpoint is unavailable.
+        students = _get_parent_children(client, subdomain) or []
+        # Fallback to school-wide roster if the homepage didn't expose children
         if not students:
             try:
                 students = client.get_all_students() or []
             except Exception:
                 students = []
-        if students and not any(_has_full_name(s) for s in students):
+        # If still no students, try class roster as final fallback
+        if not students:
             try:
                 class_students = client.get_students() or []
             except Exception:
                 class_students = []
             if class_students:
-                by_id = {str(getattr(s, "person_id", "")): s for s in students}
-                for s in class_students:
-                    by_id[str(getattr(s, "person_id", ""))] = s
-                students = list(by_id.values())
-        # Last fallback to generic visible students.
+                students = class_students
+        # Final fallback: generic visible students
         if not students:
             students = client.get_students() or []
     else:
@@ -709,14 +803,33 @@ def _student_timetable_at(client, sub, name, student_id, d):
         student = _find_student(client, name, sub)
     except RuntimeError:
         return None
+    lessons = _get_student_timetable(client, sub, student, d)
     sid = int(student.person_id)
     student_name = _student_name(student) or str(sid)
     role = _roles.get(sub, "student")
     is_parent = role == "parent"
     switch_id = sid
     if is_parent:
-        # Parent sessions can expose different IDs for visible students vs
-        # account-switching. Prefer get_child_id(name) when available.
+        try:
+            resolved = client.get_child_id(student_name)
+            if resolved is not None:
+                switch_id = int(resolved)
+        except Exception:
+            pass
+    return {"student": student_name, "student_id": switch_id if is_parent else sid,
+            "class_id": getattr(student, "class_id", None),
+            "date": d.isoformat(), "subdomain": sub, "lessons": lessons}
+
+
+def _get_student_timetable(client, sub, student, d):
+    """Get timetable for a student object, handling parent/teacher/student role switching.
+    Returns list of serialized lessons."""
+    sid = int(student.person_id)
+    student_name = _student_name(student) or str(sid)
+    role = _roles.get(sub, "student")
+    is_parent = role == "parent"
+    switch_id = sid
+    if is_parent:
         try:
             resolved = client.get_child_id(student_name)
             if resolved is not None:
@@ -726,47 +839,37 @@ def _student_timetable_at(client, sub, name, student_id, d):
         try:
             client.switch_to_child(switch_id)
             tt = client.get_my_timetable(d)
-            lessons = [_serialize(ls) for ls in tt.lessons] if tt else []
+            return [_serialize(ls) for ls in tt.lessons] if tt else []
         except Exception:
-            # Fallback path for schools/accounts where switch-to-child is not
-            # available or IDs differ from roster identifiers.
-            target = student
+            target_student = student
             if isinstance(student, EduStudentSkeleton):
-                target = next(
+                target_student = next(
                     (s for s in (client.get_students() or []) if str(getattr(s, "person_id", "")) == str(sid)),
                     student,
                 )
-            if isinstance(target, EduStudentSkeleton):
-                tt = None
-                lessons = []
-            else:
-                tt = client.get_timetable(target, d)
-                lessons = [_serialize(ls) for ls in tt.lessons] if tt else []
+            if isinstance(target_student, EduStudentSkeleton):
+                return []
+            tt = client.get_timetable(target_student, d)
+            return [_serialize(ls) for ls in tt.lessons] if tt else []
         finally:
             try:
                 client.switch_to_parent()
             except Exception:
                 pass
     elif role == "teacher":
-        # Teachers can read any student's timetable directly (no account switching).
-        target = student
-        if isinstance(target, EduStudentSkeleton):
-            target = next(
+        target_student = student
+        if isinstance(target_student, EduStudentSkeleton):
+            target_student = next(
                 (s for s in (client.get_students() or []) if str(getattr(s, "person_id", "")) == str(sid)),
                 student,
             )
-        if isinstance(target, EduStudentSkeleton):
-            tt = None
-            lessons = []
-        else:
-            tt = client.get_timetable(target, d)
-            lessons = [_serialize(ls) for ls in tt.lessons] if tt else []
+        if isinstance(target_student, EduStudentSkeleton):
+            return []
+        tt = client.get_timetable(target_student, d)
+        return [_serialize(ls) for ls in tt.lessons] if tt else []
     else:
         tt = client.get_my_timetable(d)
-        lessons = [_serialize(ls) for ls in tt.lessons] if tt else []
-    return {"student": student_name, "student_id": switch_id if is_parent else sid,
-            "class_id": getattr(student, "class_id", None),
-            "date": d.isoformat(), "subdomain": sub, "lessons": lessons}
+        return [_serialize(ls) for ls in tt.lessons] if tt else []
 
 
 @_tool
@@ -1468,10 +1571,12 @@ def get_day_summary(date_str: str = None, name: str = None, student_id: str = No
 
     Composes the individual section tools so you don't need to fire 8-10 calls
     to answer "what happened yesterday at school" or "what's coming tomorrow".
-    Like get_student_timetable: pass `name`/`student_id` for a specific student
-    (role-aware, cross-school search when no subdomain is given), or omit them
-    to report on the logged-in account. Every section is isolated — a failure in
-    one section yields {\"ok\": false, \"error\": ...} without failing the report."""
+    - If `name`/`student_id` is provided: report for that specific student.
+    - If omitted and logged in as a **parent**: auto-discover all children and
+      return a report for each child.
+    - If omitted and logged in as student/teacher: report on the logged-in account.
+    Every section is isolated — a failure in one section yields {"ok": false, "error": ...}
+    without failing the report."""
     def go():
         d = _parse_date(date_str)
         if subdomain:
@@ -1482,41 +1587,94 @@ def get_day_summary(date_str: str = None, name: str = None, student_id: str = No
                 raise RuntimeError("Not logged in to any school. Set EDUPAGE_SUBDOMAINS (or call `login_all`) first.")
         student_query = name or student_id
         schools_out = []
-        for sub in subs:
-            client = _require_client(sub)
-            result = {"subdomain": sub, "date": d.isoformat(), "sections": {}}
 
-            def run_section(key, fn):
-                try:
-                    result["sections"][key] = {"ok": True, **fn()}
-                except Exception as e:  # noqa: BLE001
-                    result["sections"][key] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
-
-            if student_query:
+        # Determine target students per school
+        targets_per_school = {}
+        if student_query:
+            # Explicit student requested
+            for sub in subs:
+                client = _require_client(sub)
                 try:
                     r = _student_timetable_at(client, sub, name, student_id, d)
-                except Exception:  # noqa: BLE001 - school can't resolve student; skip it
+                except Exception:
                     r = None
-                if r is None:
-                    continue
-                result["student"] = {"name": r["student"], "student_id": r["student_id"],
-                                     "class_id": r["class_id"]}
-                run_section("timetable", lambda r=r: {"lessons": r["lessons"]})
-            else:
-                run_section("timetable", lambda: {"lessons": _my_timetable_lessons(client, d)})
+                if r is not None:
+                    targets_per_school.setdefault(sub, []).append({
+                        "name": r["student"], "student_id": r["student_id"],
+                        "class_id": r["class_id"], "student_obj": r.get("_student_obj")
+                    })
+        else:
+            # No explicit student: auto-discover based on role
+            for sub in subs:
+                client = _require_client(sub)
+                role = _roles.get(sub, "student")
+                if role == "parent":
+                    # Parent: get all children
+                    try:
+                        students = _get_students_cached(client, sub)
+                    except Exception:
+                        students = []
+                    for student in students:
+                        targets_per_school.setdefault(sub, []).append({
+                            "name": _resolve_student_full_name(client, sub, student),
+                            "student_id": getattr(student, "person_id", None),
+                            "class_id": getattr(student, "class_id", None),
+                            "student_obj": student
+                        })
+                else:
+                    # Student/teacher: self
+                    targets_per_school.setdefault(sub, []).append({
+                        "name": "self", "student_id": None,
+                        "class_id": None, "student_obj": None
+                    })
 
-            run_section("substitutions", lambda: {"changes": _get_changes_for(client, sub, d)})
-            run_section("missing_teachers", lambda: {
-                "teachers": _get_missing_teachers_for(client, sub, d)})
-            run_section("grades", lambda: _grades_on_day(client, d))
-            run_section("meals", lambda: {"meals": _meals_payload(client, d, sub)})
-            run_section("homework", lambda: {"homework": _timeline_on_day(client, d, _HOMEWORK_TYPES)})
-            run_section("assignments", lambda: {"assignments": _timeline_on_day(client, d, _EXAM_TYPES)})
-            run_section("absences", lambda: {"absences": _timeline_on_day(client, d, _ABSENCE_TYPES)})
-            run_section("news", lambda: {"news": _timeline_on_day(client, d, {EventType.NEWS})})
-            run_section("events", lambda: {"events": _timeline_on_day(client, d, _EVENT_TYPES)})
-            run_section("notifications", lambda: {"notifications": _timeline_on_day(client, d, None)})
-            schools_out.append(result)
+        # Build report for each target student
+        for sub, targets in targets_per_school.items():
+            client = _require_client(sub)
+            for target in targets:
+                result = {"subdomain": sub, "date": d.isoformat(), "sections": {}}
+
+                def run_section(key, fn):
+                    try:
+                        result["sections"][key] = {"ok": True, **fn()}
+                    except Exception as e:  # noqa: BLE001
+                        result["sections"][key] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+                # Timetable
+                if target["student_id"] is not None:
+                    # Specific student: get their timetable
+                    try:
+                        if target.get("student_obj") is not None:
+                            # Use the cached student object directly
+                            student = target["student_obj"]
+                            lessons = _get_student_timetable(client, sub, student, d)
+                        else:
+                            # Fallback: resolve by name
+                            r = _student_timetable_at(client, sub, name, str(target["student_id"]), d)
+                            lessons = r["lessons"] if r else []
+                    except Exception:
+                        lessons = []
+                    result["student"] = {"name": target["name"], "student_id": target["student_id"],
+                                         "class_id": target["class_id"]}
+                    run_section("timetable", lambda lessons=lessons: {"lessons": lessons})
+                else:
+                    # Self (student/teacher account)
+                    run_section("timetable", lambda: {"lessons": _my_timetable_lessons(client, d)})
+
+                # Other sections (same for all - school-level data)
+                run_section("substitutions", lambda: {"changes": _get_changes_for(client, sub, d)})
+                run_section("missing_teachers", lambda: {
+                    "teachers": _get_missing_teachers_for(client, sub, d)})
+                run_section("grades", lambda: _grades_on_day(client, d))
+                run_section("meals", lambda: {"meals": _meals_payload(client, d, sub)})
+                run_section("homework", lambda: {"homework": _timeline_on_day(client, d, _HOMEWORK_TYPES)})
+                run_section("assignments", lambda: {"assignments": _timeline_on_day(client, d, _EXAM_TYPES)})
+                run_section("absences", lambda: {"absences": _timeline_on_day(client, d, _ABSENCE_TYPES)})
+                run_section("news", lambda: {"news": _timeline_on_day(client, d, {EventType.NEWS})})
+                run_section("events", lambda: {"events": _timeline_on_day(client, d, _EVENT_TYPES)})
+                run_section("notifications", lambda: {"notifications": _timeline_on_day(client, d, None)})
+                schools_out.append(result)
+
         if not schools_out:
             raise RuntimeError(f"No data found for {student_query or 'logged-in account'} on {d.isoformat()}.")
         return {"date": d.isoformat(), "student_query": student_query or None,
@@ -1610,10 +1768,10 @@ def send_message(recipient_id: str, body: str, subdomain: str = None) -> dict:
 # --------------------------------------------------------------------------
 @_tool
 def get_my_students(subdomain: str = None) -> dict:
-    """Get students visible to the logged-in account: parent accounts see all
-    students in the school; student accounts see classmates. Uses cached data.
-    Returns person_id, name, class_id — usable with switch_to_student and
-    get_student_timetable."""
+    """Get students visible to the logged-in account: parent accounts see their
+    linked children (parsed from the school homepage); student accounts see
+    classmates. Uses cached data. Returns person_id, name, class_id — usable
+    with switch_to_student and get_student_timetable."""
     def go():
         client = _require_client(subdomain)
         sub = _resolve_subdomain(subdomain)
@@ -1622,13 +1780,15 @@ def get_my_students(subdomain: str = None) -> dict:
         if role == "parent":
             serialized = []
             for s in students:
-                serialized.append(_serialize(s))
+                d = _serialize(s)
+                d["name"] = _resolve_student_full_name(client, sub, s)
+                serialized.append(d)
             return {"subdomain": sub, "students": serialized}
         classmates = []
         for s in students:
             classmates.append({
                 "person_id": s.person_id,
-                "name": _student_name(s),
+                "name": _resolve_student_full_name(client, sub, s),
                 "class_id": getattr(s, "class_id", None),
                 "number": getattr(s, "number_in_class", None),
             })
@@ -1748,9 +1908,9 @@ def clear_student_cache(subdomain: str = None) -> dict:
 @_tool
 def scan_students() -> dict:
     """Discover all students visible to the logged-in account across every school.
-    For a parent account: all students in each school. For a student account:
-    classmates in each school. Returns one entry per student per school, so a
-    multi-school student (e.g. Tamara at iprskola + cvcmalacky) appears with
+    For a parent account: their linked children in each school. For a student
+    account: classmates in each school. Returns one entry per student per school,
+    so a multi-school student (e.g. Tamara at iprskola + cvcmalacky) appears with
     separate per-school records. Uses cached data to avoid redundant API calls."""
     def go():
         if not _clients:
@@ -1769,7 +1929,7 @@ def scan_students() -> dict:
                         continue
                     seen.add(key)
                     discovered.append({
-                        "name": _student_name(student),
+                        "name": _resolve_student_full_name(client, sub, student),
                         "student_id": student.person_id,
                         "class_id": getattr(student, "class_id", None),
                         "subdomain": sub,
