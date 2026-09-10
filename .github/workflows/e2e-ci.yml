@@ -1,0 +1,63 @@
+name: e2e-live
+
+# Live integration suite against the real EduPage schools. Runs on the "every
+# day" cadence plus a manual trigger; it is NOT run on push/PR.
+#
+# PRIVACY DESIGN (public repo):
+#   - No credentials in the repo: only the EDUPAGE_USERNAME / EDUPAGE_PASSWORD
+#     secrets (injected via env; secret values are masked in all run logs).
+#   - Zero-data output: EDUPAGE_E2E_CI=1 makes the suite report dot-only results
+#     and keep NO payload previews / child ids / identity text in the report or
+#     in assertion messages. Child parsing is verified against the one-way
+#     fingerprints in tests/e2e/expected_children.fingerprint.json, never raw
+#     identities.
+#   - No artifacts are uploaded (public-repo artifacts are downloadable by
+#     anyone). The local drift report stays on the owner's machine.
+#   - The suite is read-only: conftest monkeypatches EduPage write methods to
+#     raise, and test_manifest.py guarantees no write-capable tool is invoked.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily at 04:23 UTC (quiet hour).
+    - cron: "23 4 * * *"
+
+concurrency:
+  group: e2e-live
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EDUPAGE_E2E: "1"
+      EDUPAGE_E2E_CI: "1"
+      EDUPAGE_USERNAME: ${{ secrets.EDUPAGE_USERNAME }}
+      EDUPAGE_PASSWORD: ${{ secrets.EDUPAGE_PASSWORD }}
+      # Approved schools only; cvcmalacky is deliberately out of scope.
+      EDUPAGE_SUBDOMAINS: "zssturovamalacky,iprskola"
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require e2e credentials
+        run: |
+          if [ -z "$EDUPAGE_USERNAME" ] || [ -z "$EDUPAGE_PASSWORD" ]; then
+            echo "::error::Secrets EDUPAGE_USERNAME/EDUPAGE_PASSWORD are not configured. Add them at repo Settings -> Secrets and variables -> Actions, then re-run."
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e . pytest
+
+      - name: Run live e2e suite
+        run: pytest -m e2e tests/e2e -q --no-header
