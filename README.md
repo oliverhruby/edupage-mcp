@@ -71,9 +71,7 @@ This project deliberately goes further:
 | Meals — **choose / sign-off / rate** | ❌ | ❌ | ✅ |
 | Send messages (`send_message`) | ✅ | ❌ | ✅ |
 | Parent **student switching** (switch to/from student) | partial (list) | ❌ | ✅ |
-| **2FA** login flow (device + email code) | ❌ | ❌ | ✅ |
-| Login via **session id** (`PHPSESSID`) | ❌ | ❌ | ✅ |
-| Portal login (`login_auto`) | ✅ | ❌ | ✅ |
+| **Login** — portal auto-detect, **2FA**, **session id** (`PHPSESSID`) | partial (portal) | ❌ | ✅ |
 | Next ringing time / bell schedule | ❌ | ❌ | ✅ |
 | Raw session **custom request** | ❌ | ❌ | ✅ |
 | **Multiple schools** (auto-login + discovery) | ❌ | ❌ | ✅ |
