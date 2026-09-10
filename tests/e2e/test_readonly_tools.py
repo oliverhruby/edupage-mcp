@@ -79,13 +79,10 @@ TOOLS = {
                      "known_error": "No student named"},
     "get_schools": {},
     "scan_students": {},
-    # Pre-existing defect in the parent->student timetable path (upstream
-    # IndexError after switch_to_child + wrapper skeleton fallback). Tracked so
-    # the suite fails if the error message CHANGES, alerting us to fix it or
-    # that upstream changed behaviour.
+    # Parent accounts resolve a real EduStudent and query the child's timetable
+    # directly (no switch_to_child session switching), so this must now succeed.
     "get_student_timetable": {
         "student_id": "569595", "subdomain": "@sub",
-        "known_error": "cannot unpack non-iterable NoneType object",
     },
 }
 

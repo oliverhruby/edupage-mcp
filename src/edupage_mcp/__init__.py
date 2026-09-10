@@ -117,15 +117,36 @@ def _resolve_subdomain(subdomain=None):
     return _active_subdomain
 
 
+def _login_block_message(sub):
+    """Return a user-facing reason why `sub` cannot be queried, or None if usable.
+
+    A session is blocked when there is no logged-in client, a startup/login
+    failure was recorded for the subdomain, or 2FA was never finished. Callers
+    must surface this as a login prompt — never treat a session problem as an
+    empty result list."""
+    if not sub:
+        return None
+    client = _clients.get(sub)
+    if client is None or not getattr(client, "is_logged_in", False):
+        msg = f"Not logged in for subdomain '{sub}'. Call `login` (or `login_all` for multiple schools) first."
+        failure = _autologin_failures.get(sub)
+        if failure:
+            msg = (f"Login failed for subdomain '{sub}': {failure}. "
+                   f"Call `login_all` (or `login`) to retry before querying data.")
+        return msg
+    failure = _autologin_failures.get(sub)
+    if failure:
+        return (f"Login for subdomain '{sub}' failed earlier ({failure}); the session may be "
+                f"unreliable. Re-run `login`/`login_all` to refresh it, then retry.")
+    return None
+
+
 def _require_client(subdomain=None):
     sub = _resolve_subdomain(subdomain)
-    client = _clients.get(sub) if sub else None
-    if client is None or not client.is_logged_in:
-        raise RuntimeError(
-            f"Not logged in for subdomain '{sub}'. Call `login` (or `login_all` for "
-            "multiple schools) with that subdomain first."
-        )
-    return client
+    block = _login_block_message(sub)
+    if block:
+        raise RuntimeError(block)
+    return _clients[sub]
 
 
 def _resolve_role(client):
@@ -255,16 +276,34 @@ def _get_parent_children(client, subdomain):
     `.switchChildBtn` anchor with a data-sid and a `.userName` span.
 
     Returns a list of SimpleNamespace objects with .person_id, .name and
-    .class_id (None). Returns [] on any failure so callers can fall back.
+    .class_id (None). Raises RuntimeError when the homepage cannot be fetched
+    (not logged in, HTTP error, captcha) so callers never mistake a session
+    problem for 'no children'.
     """
+    if not (client and getattr(client, "is_logged_in", False)):
+        raise RuntimeError(
+            f"Session for '{subdomain}' is not logged in (login failed or expired). "
+            "Re-run `login`/`login_all` before querying data."
+        )
     url = f"https://{subdomain}.edupage.org/"
     try:
         resp = client.session.get(url)
-        if resp.status_code != 200:
-            return []
-        page = resp.text
-    except Exception:
-        return []
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(
+            f"Could not fetch homepage of '{subdomain}' to discover children: "
+            f"{type(e).__name__}: {e}"
+        )
+    if resp.status_code != 200:
+        raise RuntimeError(
+            f"Homepage of '{subdomain}' returned HTTP {resp.status_code}; children "
+            "cannot be discovered. The session may have expired — re-run `login`."
+        )
+    page = resp.text or ""
+    if "captcha" in page.lower():
+        raise RuntimeError(
+            f"'{subdomain}' is captcha-challenged; children cannot be discovered. "
+            "Wait a while, then re-run `login`/`login_all`."
+        )
 
     children = {}
     for m in _PAT_SWITCH_CHILD_BTN.finditer(page):
@@ -289,10 +328,10 @@ def _get_parent_children(client, subdomain):
 def _get_students_cached(client, subdomain):
     """Get students for a school, using cache to avoid redundant API calls.
     Returns list of student-like objects with .person_id, .name, .class_id.
-    For parent accounts, returns the parent's actual children (parsed from the
-    school homepage). Some schools return children with short names (initials),
-    negative IDs, or no children on the homepage - those fall back to the
-    school-wide roster."""
+    For parent accounts: the parent's actual children (parsed from the school
+    homepage). A failed homepage fetch raises — it is never turned into 'no
+    children', and there is no roster fallback (a parent's school-wide roster is
+    not the same as their linked children)."""
     role = _roles.get(subdomain, "student")
     cache_key = (subdomain, role)
     now = time.time()
@@ -300,28 +339,18 @@ def _get_students_cached(client, subdomain):
     if cached and (now - cached["timestamp"]) < _STUDENT_CACHE_TTL:
         return cached["students"]
     if role == "parent":
-        students = _get_parent_children(client, subdomain) or []
-        # Fallback to school-wide roster if the homepage didn't expose children
-        if not students:
-            try:
-                students = client.get_all_students() or []
-            except Exception:
-                students = []
-        # If still no students, try class roster as final fallback
-        if not students:
-            try:
-                class_students = client.get_students() or []
-            except Exception:
-                class_students = []
-            if class_students:
-                students = class_students
-        # Final fallback: generic visible students
-        if not students:
-            students = client.get_students() or []
+        students = _get_parent_children(client, subdomain)
     else:
         students = client.get_students() or []
     _student_cache[cache_key] = {"students": students, "timestamp": now}
     return students
+
+
+def _drop_student_cache(subdomain):
+    """Drop cached student data for one subdomain (re-login invalidates it)."""
+    for key in [k for k in list(_student_cache.keys()) if k[0] == subdomain]:
+        del _student_cache[key]
+    _autologin_failures.pop(subdomain, None)
 
 
 def _humanize(value):
@@ -440,7 +469,12 @@ def login(username: str = None, password: str = None, subdomain: str = None) -> 
                 "username, password and subdomain must be provided (or set as env vars)."
             )
         client = Edupage()
-        tf = client.login(user, pwd, sub)
+        try:
+            tf = client.login(user, pwd, sub)
+        except Exception as e:  # noqa: BLE001
+            _autologin_failures[sub] = f"{type(e).__name__}: {e}"
+            raise
+        _drop_student_cache(sub)
         _clients[sub] = client
         _two_factor[sub] = tf
         _roles[sub] = _resolve_role(client)
@@ -480,6 +514,7 @@ def login_all(subdomains: str = None, usernames: str = None, passwords: str = No
             try:
                 client = Edupage()
                 tf = client.login(user, pwd, sub)
+                _drop_student_cache(sub)
                 _clients[sub] = client
                 _two_factor[sub] = tf
                 _roles[sub] = _resolve_role(client)
@@ -488,6 +523,7 @@ def login_all(subdomains: str = None, usernames: str = None, passwords: str = No
                                 "role": _roles[sub],
                                 "two_factor_required": tf is not None})
             except Exception as e:  # noqa: BLE001
+                _autologin_failures[sub] = f"{type(e).__name__}: {e}"
                 results.append({"subdomain": sub, "ok": False, "error": f"{type(e).__name__}: {e}"})
         if _clients:
             _active_subdomain = _clients and next(iter(_clients))
@@ -509,8 +545,13 @@ def login_auto(username: str = None, password: str = None, subdomain: str = None
         if not (user and pwd):
             raise RuntimeError("username and password must be provided (or set as env vars).")
         client = Edupage()
-        tf = client.login_auto(user, pwd)
+        try:
+            tf = client.login_auto(user, pwd)
+        except Exception as e:  # noqa: BLE001
+            _autologin_failures[subdomain or "portal"] = f"{type(e).__name__}: {e}"
+            raise
         sub = subdomain or client.subdomain or "auto"
+        _drop_student_cache(sub)
         _clients[sub] = client
         _two_factor[sub] = tf
         _roles[sub] = _resolve_role(client)
@@ -529,6 +570,7 @@ def login_from_session(session_id: str, subdomain: str, username: str) -> dict:
     def go():
         global _clients, _active_subdomain, _roles
         client = Edupage.from_session_id(session_id, subdomain, username)
+        _drop_student_cache(subdomain)
         _clients[subdomain] = client
         _roles[subdomain] = _resolve_role(client)
         _active_subdomain = subdomain
@@ -571,6 +613,7 @@ def two_factor_finish(code: str = None, subdomain: str = None) -> dict:
         else:
             tf.finish()
         _two_factor[sub] = None
+        _drop_student_cache(sub)
         _roles[sub] = _resolve_role(client)
         return {"logged_in": True, "subdomain": sub, "user_id": client.get_user_id(),
                 "role": _roles[sub]}
@@ -789,8 +832,7 @@ def _find_student_all(client, name, subdomain=None):
 
 def _student_timetable_at(client, sub, name, student_id, d):
     """Resolve a student (by name or id) within one school and return their timetable.
-    Returns None when the student is not found at this school. Role-aware: if the
-    caller is a parent, temporarily switches to the student account. Uses cache."""
+    Returns None when the student is not found at this school. Uses cache."""
     if student_id and not name:
         sid = str(student_id)
         students = _get_students_cached(client, sub)
@@ -806,51 +848,69 @@ def _student_timetable_at(client, sub, name, student_id, d):
     lessons = _get_student_timetable(client, sub, student, d)
     sid = int(student.person_id)
     student_name = _student_name(student) or str(sid)
-    role = _roles.get(sub, "student")
-    is_parent = role == "parent"
-    switch_id = sid
-    if is_parent:
-        try:
-            resolved = client.get_child_id(student_name)
-            if resolved is not None:
-                switch_id = int(resolved)
-        except Exception:
-            pass
-    return {"student": student_name, "student_id": switch_id if is_parent else sid,
+    return {"student": student_name, "student_id": sid,
             "class_id": getattr(student, "class_id", None),
-            "date": d.isoformat(), "subdomain": sub, "lessons": lessons}
+            "date": d.isoformat(), "subdomain": sub, "lessons": lessons,
+            "_student_obj": student}
+
+
+def _resolve_edustudent(client, person_id):
+    """Return a concrete edupage-api EduStudent for `person_id`, or None.
+
+    Upstream `get_timetable` keys its lookup by the *exact* Python type of the
+    target (`timetables.py: lookup.get(type(target))`), so passing a skeleton or
+    a SimpleNamespace from our roster cache raises `TypeError: cannot unpack
+    non-iterable NoneType object`. A real EduStudent (as returned by
+    `client.get_students()` for a parent's children) must be resolved before
+    calling upstream."""
+    pid = str(person_id)
+    for s in (client.get_students() or []):
+        if s is None:
+            continue
+        if str(getattr(s, "person_id", "")) == pid:
+            return s if isinstance(s, EduStudent) else None
+    for s in (client.get_all_students() or []):
+        if s is None:
+            continue
+        if str(getattr(s, "person_id", "")) == pid and isinstance(s, EduStudent):
+            return s
+    return None
 
 
 def _get_student_timetable(client, sub, student, d):
-    """Get timetable for a student object, handling parent/teacher/student role switching.
+    """Get timetable for a student object, handling parent/teacher/student role.
     Returns list of serialized lessons."""
     sid = int(student.person_id)
-    student_name = _student_name(student) or str(sid)
     role = _roles.get(sub, "student")
     is_parent = role == "parent"
-    switch_id = sid
+
     if is_parent:
+        # Preferred path: query the child's timetable directly with a concrete
+        # EduStudent. The upstream switch_to_child + get_my_timetable path is
+        # broken for parents (IndexError inside __get_date_plan) and, when the
+        # following switch_to_parent fails, leaves the shared session stuck in
+        # child mode — corrupting every later call. Avoid switching entirely.
+        real = _resolve_edustudent(client, sid)
+        if real is not None:
+            try:
+                tt = client.get_timetable(real, d)
+                return [_serialize(ls) for ls in tt.lessons] if tt else []
+            except Exception:
+                pass  # degrade to the guarded switch path below
+        # Last-resort switch path (a few schools require a child session). Never
+        # hand an untyped object to upstream and always restore the session.
         try:
-            resolved = client.get_child_id(student_name)
-            if resolved is not None:
-                switch_id = int(resolved)
-        except Exception:
-            switch_id = sid
-        try:
-            client.switch_to_child(switch_id)
+            client.switch_to_child(sid)
             tt = client.get_my_timetable(d)
             return [_serialize(ls) for ls in tt.lessons] if tt else []
         except Exception:
-            target_student = student
-            if isinstance(student, EduStudentSkeleton):
-                target_student = next(
-                    (s for s in (client.get_students() or []) if str(getattr(s, "person_id", "")) == str(sid)),
-                    student,
-                )
-            if isinstance(target_student, EduStudentSkeleton):
-                return []
-            tt = client.get_timetable(target_student, d)
-            return [_serialize(ls) for ls in tt.lessons] if tt else []
+            if real is not None:
+                try:
+                    tt = client.get_timetable(real, d)
+                    return [_serialize(ls) for ls in tt.lessons] if tt else []
+                except Exception:
+                    return []
+            return []
         finally:
             try:
                 client.switch_to_parent()
@@ -1587,6 +1647,7 @@ def get_day_summary(date_str: str = None, name: str = None, student_id: str = No
                 raise RuntimeError("Not logged in to any school. Set EDUPAGE_SUBDOMAINS (or call `login_all`) first.")
         student_query = name or student_id
         schools_out = []
+        discovery_errors = []
 
         # Determine target students per school
         targets_per_school = {}
@@ -1596,12 +1657,14 @@ def get_day_summary(date_str: str = None, name: str = None, student_id: str = No
                 client = _require_client(sub)
                 try:
                     r = _student_timetable_at(client, sub, name, student_id, d)
-                except Exception:
-                    r = None
+                except Exception as e:  # noqa: BLE001
+                    discovery_errors.append((sub, f"Could not resolve '{student_query}' at '{sub}': {type(e).__name__}: {e}"))
+                    continue
                 if r is not None:
                     targets_per_school.setdefault(sub, []).append({
                         "name": r["student"], "student_id": r["student_id"],
-                        "class_id": r["class_id"], "student_obj": r.get("_student_obj")
+                        "class_id": r["class_id"], "student_obj": r.get("_student_obj"),
+                        "lessons": r["lessons"]
                     })
         else:
             # No explicit student: auto-discover based on role
@@ -1612,8 +1675,9 @@ def get_day_summary(date_str: str = None, name: str = None, student_id: str = No
                     # Parent: get all children
                     try:
                         students = _get_students_cached(client, sub)
-                    except Exception:
-                        students = []
+                    except Exception as e:  # noqa: BLE001
+                        discovery_errors.append((sub, f"Could not discover children at '{sub}': {type(e).__name__}: {e}"))
+                        continue
                     for student in students:
                         targets_per_school.setdefault(sub, []).append({
                             "name": _resolve_student_full_name(client, sub, student),
@@ -1628,9 +1692,17 @@ def get_day_summary(date_str: str = None, name: str = None, student_id: str = No
                         "class_id": None, "student_obj": None
                     })
 
+        # Add error entries for schools that failed discovery
+        for sub, err in discovery_errors:
+            schools_out.append({"subdomain": sub, "date": d.isoformat(), "error": err})
+
         # Build report for each target student
         for sub, targets in targets_per_school.items():
-            client = _require_client(sub)
+            try:
+                client = _require_client(sub)
+            except RuntimeError as e:
+                schools_out.append({"subdomain": sub, "date": d.isoformat(), "error": str(e)})
+                continue
             for target in targets:
                 result = {"subdomain": sub, "date": d.isoformat(), "sections": {}}
 
@@ -1642,18 +1714,18 @@ def get_day_summary(date_str: str = None, name: str = None, student_id: str = No
 
                 # Timetable
                 if target["student_id"] is not None:
-                    # Specific student: get their timetable
-                    try:
-                        if target.get("student_obj") is not None:
-                            # Use the cached student object directly
-                            student = target["student_obj"]
-                            lessons = _get_student_timetable(client, sub, student, d)
-                        else:
-                            # Fallback: resolve by name
-                            r = _student_timetable_at(client, sub, name, str(target["student_id"]), d)
-                            lessons = r["lessons"] if r else []
-                    except Exception:
-                        lessons = []
+                    # Reuse the timetable already fetched during discovery;
+                    # re-resolve only for cached roster entries (auto-discovery).
+                    lessons = target.get("lessons")
+                    if lessons is None:
+                        try:
+                            if target.get("student_obj") is not None:
+                                lessons = _get_student_timetable(client, sub, target["student_obj"], d)
+                            else:
+                                r = _student_timetable_at(client, sub, name, str(target["student_id"]), d)
+                                lessons = r["lessons"] if r else []
+                        except Exception:
+                            lessons = []
                     result["student"] = {"name": target["name"], "student_id": target["student_id"],
                                          "class_id": target["class_id"]}
                     run_section("timetable", lambda lessons=lessons: {"lessons": lessons})
@@ -1676,6 +1748,8 @@ def get_day_summary(date_str: str = None, name: str = None, student_id: str = No
                 schools_out.append(result)
 
         if not schools_out:
+            if discovery_errors:
+                raise RuntimeError(f"Could not build a report: {discovery_errors[0][1]}")
             raise RuntimeError(f"No data found for {student_query or 'logged-in account'} on {d.isoformat()}.")
         return {"date": d.isoformat(), "student_query": student_query or None,
                 "results": schools_out}
@@ -1837,11 +1911,18 @@ def find_student(name: str, subdomain: str = None) -> dict:
         if not schools:
             raise RuntimeError("Not logged in to any school. Set EDUPAGE_SUBDOMAINS (or call `login_all`) first.")
         all_results = []
+        errors = []
         for sub in schools:
-            client = _clients[sub]
-            if client is None or not client.is_logged_in:
+            block = _login_block_message(sub)
+            if block:
+                errors.append(block)
                 continue
-            matches = _find_student_all(client, name, sub)
+            client = _clients[sub]
+            try:
+                matches = _find_student_all(client, name, sub)
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"{sub}: {type(e).__name__}: {e}")
+                continue
             for m in matches:
                 all_results.append({
                     "name": m["name"], "student_id": m["student_id"],
@@ -1849,6 +1930,8 @@ def find_student(name: str, subdomain: str = None) -> dict:
                     "tier": m["tier"], "confidence": m["confidence"],
                 })
         if not all_results:
+            if errors:
+                raise RuntimeError("; ".join(errors))
             raise RuntimeError(f"No student named '{name}' found in any logged-in school {schools}.")
         # Sort by tier (best first) across all schools
         all_results.sort(key=lambda r: (r["tier"], -r["confidence"]))
@@ -1918,9 +2001,11 @@ def scan_students() -> dict:
         discovered = []
         seen = set()
         for sub in _clients:
-            client = _clients[sub]
-            if not (client and client.is_logged_in):
+            block = _login_block_message(sub)
+            if block:
+                discovered.append({"subdomain": sub, "error": block})
                 continue
+            client = _clients[sub]
             try:
                 students = _visible_students(client, sub)
                 for student in students:

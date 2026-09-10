@@ -64,8 +64,9 @@ logic. Do not grow a scraping layer here.
   students keyed by `(subdomain, role)` for `_STUDENT_CACHE_TTL` (5 min) to avoid
   redundant API calls across tools. Cache is cleared on `clear_student_cache`,
   auto-login, and re-login. Parent accounts get their linked children by parsing
-  the school homepage (`_get_parent_children`), falling back to
-  `get_all_students()` when the homepage exposes no children; student/teacher
+  the school homepage (`_get_parent_children`); a failed homepage fetch raises (it
+  is never treated as "no children"), and there is no roster fallback (a parent's
+  school-wide roster is not the same as their linked children). Student/teacher
   use `get_students()`.
 - **Tiered name matching.** `_find_student(client, name, subdomain)` matches by
   tier (highest confidence first): full name → first name → last name → short
@@ -183,9 +184,8 @@ powershell -ExecutionPolicy Bypass -File run_e2e.ps1     # local runner
   is ever invoked.
 - Known upstream defects are tracked as `known_error` substrings and **fail the
   suite if the message changes** (e.g. `find_student` no-such-student,
-  `get_grades` `percent` UnboundLocalError in edupage-api 0.12.5,
-  `get_student_timetable` parent→child path). Fix them in our wrapper or bump
-  upstream when they drift.
+  `get_grades` `percent` UnboundLocalError in edupage-api 0.12.5). Fix them in
+  our wrapper or bump upstream when they drift.
 - A drift report is written to `reports/e2e-report.json` (gitignored) with full
   payload previews — that is the **local** report and stays on the machine.
 
