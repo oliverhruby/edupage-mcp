@@ -166,10 +166,18 @@ python -m py_compile src/edupage_mcp/__init__.py
 python -m edupage_mcp     # then drive an MCP client; tools/list should show all
 ```
 
-There is no unit-test suite; a manual MCP `tools/list` after any addition is the
-verification step. There **is** a live integration suite in `tests/e2e/` that
-logs into the real schools with the helper's own EduPage account and exercises
-every read-only tool:
+There is a small **offline** unit suite in `tests/unit/` for deterministic
+wrapper logic that the live suite can't pin down (parent→child timetable path,
+`get_day_summary` discovery-first dispatch, `EDUPAGE_SUBDOMAINS` scoping):
+
+```bash
+python -m pytest tests/unit -q
+```
+
+A manual MCP `tools/list` after any addition is still the verification step.
+There **is** also a live integration suite in `tests/e2e/` that logs into the
+real schools with the helper's own EduPage account and exercises every read-only
+tool:
 
 ```bash
 powershell -ExecutionPolicy Bypass -File run_e2e.ps1     # local runner
