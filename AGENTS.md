@@ -256,9 +256,16 @@ To release a new version:
 
 1. Bump `version` in `pyproject.toml`.
 2. Commit + push.
-3. Push a tag matching the version, e.g. `git tag v0.1.0 && git push --tags`.
+3. Push a tag matching the version, e.g. `git tag v0.1.0 && git push origin v0.1.0`.
 4. The `publish` workflow builds and uploads automatically (uses the `release`
    GitHub environment, if configured).
+
+> **Tags are created manually.** `.github/workflows/auto-tag.yml` was removed:
+> tags pushed by `github-actions[bot]` via `GITHUB_TOKEN` do **not** re-trigger
+> the tag-push workflows (Release / Publish / Publish Container), so an "auto
+> tag" left the tag un-published. Push the exact tag ref yourself
+> (`git push origin v0.1.0` — avoid `--tags`, which pushes every local tag,
+> including stale ones).
 
 > If the `release` environment has a "required reviewers" gate, approve the run
 > in the GitHub Actions UI. Local rebuilds (`python -m build` + `twine upload`)
