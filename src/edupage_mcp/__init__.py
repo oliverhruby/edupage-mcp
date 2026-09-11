@@ -107,6 +107,20 @@ def _first_subdomain_from_env():
     return subs[0] if subs else None
 
 
+def _discovery_subdomains():
+    """Subdomains available to discovery/scanning tools.
+
+    Restricted to the schools listed in `EDUPAGE_SUBDOMAINS` (comma-separated)
+    whenever that variable is set, so auto-discovery never touches a school the
+    user did not opt in to via SUBDOMAINS. When it is not set, every session
+    in `_clients` is used. Callers must still surface login blocks for
+    configured-but-unavailable schools instead of silently skipping them."""
+    configured = [s.strip() for s in EDUPAGE_SUBDOMAINS.split(",") if s.strip()]
+    if configured:
+        return configured
+    return [s for s, c in _clients.items() if c is not None]
+
+
 def fail(message: str) -> dict:
     return {"isError": True, "content": [{"type": "text", "text": message}]}
 
@@ -312,7 +326,7 @@ def _get_parent_children(client, subdomain):
         name_m = _PAT_CHILD_NAME.search(m.group(2))
         if name_m:
             name = html.unescape(re.sub(r"<[^>]+>", "", name_m.group(1))).strip()
-            # Display name looks like "Viktor Hrubý, VII.B" - drop the class suffix.
+            # Display name looks like "Surname Name, ClassCode" - drop the class suffix.
             name = re.sub(r",\s*[^,]+$", "", name).rstrip()
         children.setdefault(sid, SimpleNamespace(person_id=sid, name=name, class_id=None))
     psid_m = _PAT_PARENT_STUDENTID.search(page)
@@ -718,7 +732,7 @@ def _find_student(client, name: str, subdomain=None):
       1. Exact full name match (case-insensitive)
       2. First name match (needle is a single word matching a first name)
       3. Last name match (needle matches a last name)
-      4. Short name match for parent accounts (e.g. 'Novak V.' matches 'Viktor Novak')
+      4. Short name match for parent accounts (e.g. 'Doe J.' matches 'John Doe')
 
     Returns the best single match. Raises RuntimeError if 0 or >1 matches at the
     highest populated tier."""
@@ -799,7 +813,7 @@ def _find_student_all(client, name, subdomain=None):
         elif short_parts and len(short_parts) >= 2 and (needle == short_parts[-1] or needle_norm == short_parts_norm[-1]):
             tier = 3
             confidence = 0.65
-        # Tier 3b: initial-based short names (e.g. "Viktor Hruby" vs "VH")
+        # Tier 3b: initial-based short names (e.g. "John Doe" vs "JD")
         elif short_initials and len(needle_parts_norm) >= 2:
             initials = "".join(p[0] for p in needle_parts_norm if p)
             if initials and short_initials.startswith(initials):
@@ -935,9 +949,10 @@ def _get_student_timetable(client, sub, student, d):
 @_tool
 def get_student_timetable(name: str = None, student_id: str = None, date_str: str = None, subdomain: str = None) -> dict:
     """Get a student's timetable by first/last name OR person_id.
-    Without a `subdomain`, searches ALL logged-in schools and returns one result per
-    school where the student is found — so a student attending multiple schools (e.g.
-    Tamara at iprskola + cvcmalacky) yields separate per-school timetables. If logged
+    Without a `subdomain`, searches every school in the discovery scope (the
+    configured `EDUPAGE_SUBDOMAINS`, or all logged-in schools when unset) and
+    returns one result per school where the student is found — so a student
+    attending multiple schools yields separate per-school timetables. If logged
     in as a parent, this switches to (and back from) the student account for the lookup.
     Returns the student's lessons plus which student/account/school was used."""
     def go():
@@ -950,7 +965,7 @@ def get_student_timetable(name: str = None, student_id: str = None, date_str: st
             if result is None:
                 raise RuntimeError(f"No student found at subdomain '{subdomain}'.")
             return {"results": [result]}
-        schools = list(_clients.keys())
+        schools = [s for s in _discovery_subdomains()]
         if not schools:
             raise RuntimeError("Not logged in to any school. Set EDUPAGE_SUBDOMAINS (or call `login_all`) first.")
         results = []
@@ -1624,30 +1639,37 @@ def _grades_on_day(client, d):
 
 @_tool
 def get_day_summary(date_str: str = None, name: str = None, student_id: str = None,
-                    subdomain: str = None) -> dict:
+                    subdomain: str = None, full: bool = False) -> dict:
     """One-call daily school report for a date (default today): timetable,
     substitutions, missing teachers, grades received that day, meals, homework,
     assignments, absences, news, events, and timeline notifications.
 
     Composes the individual section tools so you don't need to fire 8-10 calls
     to answer "what happened yesterday at school" or "what's coming tomorrow".
-    - If `name`/`student_id` is provided: report for that specific student.
-    - If omitted and logged in as a **parent**: auto-discover all children and
-      return a report for each child.
+    - If `name`/`student_id` is provided: report for that specific student
+      (found across all schools unless `subdomain` scopes it).
+    - If omitted: **discovery-first** — for a **parent** this returns a
+      lightweight per-school index of the account's children (no per-child
+      section fetching), so you can then call per child with `name`/`student_id`.
+      Set `full=True` to instead build the full report for every child.
     - If omitted and logged in as student/teacher: report on the logged-in account.
     Every section is isolated — a failure in one section yields {"ok": false, "error": ...}
     without failing the report."""
     def go():
         d = _parse_date(date_str)
+        discovery_errors = []
         if subdomain:
             subs = [_resolve_subdomain(subdomain)]
         else:
-            subs = [s for s, c in _clients.items() if c is not None and c.is_logged_in]
-            if not subs:
-                raise RuntimeError("Not logged in to any school. Set EDUPAGE_SUBDOMAINS (or call `login_all`) first.")
+            subs = []
+            for sub in _discovery_subdomains():
+                block = _login_block_message(sub)
+                if block:
+                    discovery_errors.append((sub, block))
+                else:
+                    subs.append(sub)
         student_query = name or student_id
         schools_out = []
-        discovery_errors = []
 
         # Determine target students per school
         targets_per_school = {}
@@ -1695,6 +1717,31 @@ def get_day_summary(date_str: str = None, name: str = None, student_id: str = No
         # Add error entries for schools that failed discovery
         for sub, err in discovery_errors:
             schools_out.append({"subdomain": sub, "date": d.isoformat(), "error": err})
+
+        # Discovery-first: when no student is named and the caller did not ask
+        # for full reports, return a lightweight per-school index of the account's
+        # children instead of building (possibly slow, and easily conflated)
+        # per-child full reports across every school in one payload.
+        if not student_query and not full and any(
+                t.get("student_id") is not None
+                for ts in targets_per_school.values() for t in ts):
+            for sub, targets in targets_per_school.items():
+                schools_out.append({
+                    "subdomain": sub,
+                    "date": d.isoformat(),
+                    "students": [{
+                        "name": t["name"],
+                        "student_id": t["student_id"],
+                        "class_id": t["class_id"],
+                    } for t in targets],
+                })
+            return {"date": d.isoformat(), "mode": "discovery",
+                    "message": "Discovery index — each school lists the students "
+                               "visible to the logged-in account. Call `get_day_summary` "
+                               "with `name` (or `student_id`) and optionally `subdomain`, "
+                               "per child, to fetch a full daily report. Use `full=True` "
+                               "to build full reports for all children in one call.",
+                    "results": schools_out}
 
         # Build report for each target student
         for sub, targets in targets_per_school.items():
@@ -1907,7 +1954,7 @@ def find_student(name: str, subdomain: str = None) -> dict:
                     "tier": m["tier"], "confidence": m["confidence"]}
                     for m in matches],
                     "query": name, "subdomain": _resolve_subdomain(subdomain)}
-        schools = list(_clients.keys())
+        schools = [s for s in _discovery_subdomains()]
         if not schools:
             raise RuntimeError("Not logged in to any school. Set EDUPAGE_SUBDOMAINS (or call `login_all`) first.")
         all_results = []
@@ -1990,17 +2037,18 @@ def clear_student_cache(subdomain: str = None) -> dict:
 
 @_tool
 def scan_students() -> dict:
-    """Discover all students visible to the logged-in account across every school.
+    """Discover all students visible to the logged-in account across the discovery
+    scope (the configured `EDUPAGE_SUBDOMAINS`, or every school when unset).
     For a parent account: their linked children in each school. For a student
     account: classmates in each school. Returns one entry per student per school,
-    so a multi-school student (e.g. Tamara at iprskola + cvcmalacky) appears with
-    separate per-school records. Uses cached data to avoid redundant API calls."""
+    so a multi-school student appears with separate per-school records. Uses cached
+    data to avoid redundant API calls."""
     def go():
         if not _clients:
             raise RuntimeError("Not logged in to any school. Set EDUPAGE_SUBDOMAINS (or call `login_all`) first.")
         discovered = []
         seen = set()
-        for sub in _clients:
+        for sub in _discovery_subdomains():
             block = _login_block_message(sub)
             if block:
                 discovered.append({"subdomain": sub, "error": block})

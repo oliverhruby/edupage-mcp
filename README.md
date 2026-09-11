@@ -355,7 +355,7 @@ After editing client config, **restart the client** so the MCP server is loaded.
 | "What is for lunch and order option 2 for tomorrow" | `get_meals` → `choose_meal date_str="2026-09-10" meal_type="lunch" number=2` | Meal menu and order confirmation (or a clear error if unavailable). |
 | "Find Student A's timetable for tomorrow" | `get_student_timetable name="Student A" date_str="2026-09-10"` | Student A's timetable; if found in multiple schools, one result per school. |
 | "List teachers and send a hello to Teacher456" | `get_teachers` → `send_message recipient_id="Teacher456" body="Hello!"` | Teacher list plus message sent confirmation. |
-| **"What happened at school yesterday for my kids?"** | `get_day_summary date_str="2026-09-09" name="Student A"` → `get_day_summary date_str="2026-09-09" name="Student B"` | **Complete daily report per child**: timetable, substitutions, missing teachers, grades received, meals, homework, assignments, absences, news, events, and notifications — all in one call per student. |
+| **"What happened at school yesterday for my kids?"** | `get_day_summary date_str="2026-09-09"` (discovery index) → `get_day_summary date_str="2026-09-09" name="Student A" subdomain="school-a"` → `... name="Student B" subdomain="school-b"` | **Discovery-first**: the no-name call lists each child per school; then one complete daily report call per child (timetable, substitutions, missing teachers, grades, meals, homework, assignments, absences, news, events, notifications). Keeps each response small and avoids mixing schools/students. |
 | **"How was school today for Student A?"** | `get_day_summary name="Student A"` (defaults to today) | Human-readable summary via the bundled OpenCode skill `school-day-summary`. |
 
 ---
@@ -404,9 +404,10 @@ You can also call `login` once per school to add/lookup sessions incrementally.
 
 ## Students by name (e.g. "timetable for Student A")
 
-Because the server **auto-discovers students across all logged-in schools**, you
-don't need to know or state which school a student is in. Just ask for the
-timetable by name and the server searches every school it's logged into:
+Because the server **auto-discovers students across the configured
+`EDUPAGE_SUBDOMAINS`** (or every logged-in school when the variable is unset),
+you don't need to know or state which school a student is in. Just ask for the
+timetable by name and the server searches every school in scope:
 
 ```text
 "timetable for Student A"  ->  get_student_timetable name="Student A"
@@ -414,8 +415,10 @@ timetable by name and the server searches every school it's logged into:
 
 `get_student_timetable` (with no `subdomain`):
 
-1. searches **every logged-in school** for a student whose first/last/full name
-   matches (`scan_students` does just the discovery step),
+1. searches **every school in the discovery scope** — the configured
+   `EDUPAGE_SUBDOMAINS`, or all logged-in schools when unset — for a student
+   whose first/last/full name matches (`scan_students` does just the discovery
+   step),
 2. for each school where the student is found, switches to the student account if
    you're logged in as a parent, returns that student's timetable for the date, and
    switches back to the parent account afterwards,
@@ -458,7 +461,7 @@ fully automatic.
 | `get_news` | School news |  |
 | `get_timetable_changes` | Substitutions / timetable changes for a date |  |
 | `get_missing_teachers` | Teachers missing on a date |  |
-| `get_day_summary` | One-call daily report (timetable, substitutions, teachers, grades, meals, homework, assignments, absences, news, events, notifications) for a date; student by name/id (role-aware). Bundles OpenCode skill `school-day-summary` for human-readable output. |  |
+| `get_day_summary` | One-call daily report (timetable, substitutions, teachers, grades, meals, homework, assignments, absences, news, events, notifications) for a date; student by name/id (role-aware). **Discovery-first**: parent without `name`/`student_id` returns a lightweight per-school student index (`mode:"discovery"`); pass `full=True` to build full reports for every child. Bundles OpenCode skill `school-day-summary` for human-readable output. |  |
 | `get_meals` | Meal menu (snack/lunch/afternoon snack; `include_breakfast`/`include_dinner` add extras) |  |
 | `choose_meal` | Order a meal | ✅ |
 | `sign_off_meal` | Cancel an ordered meal | ✅ |
@@ -471,7 +474,7 @@ fully automatic.
 | `get_subjects` | All subjects |  |
 | `get_my_students` | Students visible to the logged-in account (one school) |  |
 | `find_student` | Look up a student's person_id by name (cross-school) |  |
-| `scan_students` | Auto-discover students across **all** logged-in schools |  |
+| `scan_students` | Auto-discover students across the configured `EDUPAGE_SUBDOMAINS` (or all logged-in schools when unset) |  |
 | `clear_student_cache` | Clear cached student rosters (one school or all schools) | ✅ cache |
 | `get_schools` | List logged-in schools + role per school |  |
 | `send_message` | Send a message to a user | ✅ |

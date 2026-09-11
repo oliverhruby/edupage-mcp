@@ -7,7 +7,7 @@ description: Build a "what happened at school that day" report for a child/stude
 
 Use this when the user wants a single-day, cross-cutting overview of school
 activity for one student (or the logged-in account) — for example "what
-happened yesterday for Viktor", "what does today look like", or "what is coming
+happened yesterday for my child", "what does today look like", or "what is coming
 tomorrow".
 
 ## Workflow
@@ -21,21 +21,29 @@ tomorrow".
 
 2. **Determine who.** Prefer the student the conversation is about. If a
    student is not already identified and the account is a parent, ask which
-   child (e.g. "Viktor" or "Tamara") when ambiguous. When no student is named,
-   report on the logged-in account.
+   child when ambiguous (e.g. "Student A" or "Student B"). When no student is named,
+   report on one student at a time — never a whole class or every child at
+   every school in a single report.
 
-3. **Call `get_day_summary` once** with:
+3. **Discover first, then report per student.** Parent accounts: call
+   `get_day_summary` *without* `name`/`student_id` to get a lightweight
+   per-school discovery index (it returns `mode: "discovery"`). Pick the child
+   (by `name` or `student_id`) and school (`subdomain`) you actually want, then
+   call `get_day_summary` once **per child** with:
    - `date_str` = the target date
-   - `name` = the student's name (or `student_id`)
-   - `subdomain` = the school if known (otherwise the tool searches all
-     logged-in schools and returns one result per school)
+   - `name` = the child's name (or `student_id`)
+   - `subdomain` = that child's school (scopes the search; keeps the response small)
 
-   This returns every section in a single round trip:
+   This returns every section for that one student in a single round trip:
    `timetable`, `substitutions`, `missing_teachers`, `grades`, `meals`,
    `homework`, `assignments`, `absences`, `news`, `events`, `notifications`.
 
+   Do **not** call `get_day_summary` without `name` expecting full reports — by
+   default it only lists students (use `full=True` for all-children reports,
+   only if truly needed).
+
    If a bare first name returns no result, retry with the **full name**
-   (e.g. `name="Viktor Hrubý"`): some school rosters expose only initials, so
+   (e.g. `name="Student A"`): some school rosters expose only initials, so
    the matcher needs first + last name.
 
 4. **Fall back to individual tools if needed.** If `get_day_summary` is not
@@ -53,7 +61,7 @@ tomorrow".
 ## Output format
 
 Render a concise markdown report titled with the date (e.g.
-`### Štvrtok 2026-09-10 — Viktor`), then:
+`### Štvrtok 2026-09-10 — Student A`), then:
 
 - **Rozvrh (Lessons)** — subject, time, room/teacher if present.
 - **Zastupovanie / zmeny (Substitutions)** — only if there are changes; say

@@ -31,11 +31,11 @@ SUB = "testschool"
 D = dt.date(2026, 9, 10)
 
 VIKTOR = EduStudent(
-    person_id=569595, name="Viktor Hrubý", gender=Gender.MALE,
-    in_school_since=None, class_id=604414, number_in_class=5,
+    person_id=111223, name="Anna Nováková", gender=Gender.FEMALE,
+    in_school_since=None, class_id=701111, number_in_class=7,
 )
 TAMARA = EduStudent(
-    person_id=-33, name="Tamara Hrubá", gender=Gender.FEMALE,
+    person_id=222334, name="Boris Šikovný", gender=Gender.MALE,
     in_school_since=None, class_id=-6, number_in_class=1,
 )
 
@@ -97,11 +97,11 @@ class FakeClient:
         # Mock homepage HTML with both children as switchChildBtn anchors
         html = (
             '<html><body>'
-            '<a class="switchChildBtn" data-sid="569595">'
-            '<span class="userName">Viktor Hrubý, VII.B</span></a>'
-            '<a class="switchChildBtn" data-sid="-33">'
-            '<span class="userName">Tamara Hrubá, I.ZK</span></a>'
-            'ASC.req_props.parent_studentid = "569595"'
+            '<a class="switchChildBtn" data-sid="111223">'
+            '<span class="userName">Anna Nováková, VII.B</span></a>'
+            '<a class="switchChildBtn" data-sid="222334">'
+            '<span class="userName">Boris Šikovný, I.ZK</span></a>'
+            'ASC.req_props.parent_studentid = "111223"'
             '</body></html>'
         )
         return SimpleNamespace(get=lambda *a, **k: SimpleNamespace(status_code=200, text=html))
@@ -142,7 +142,7 @@ def _disable_public_meal_widget(monkeypatch):
 
 
 def test_parent_resolves_real_edustudent_without_switching(client):
-    raw = SimpleNamespace(person_id=569595, name="Viktor Hrubý", class_id=604414)
+    raw = SimpleNamespace(person_id=111223, name="Anna Nováková", class_id=701111)
     lessons = m._get_student_timetable(client, SUB, raw, D)
 
     assert len(lessons) == 1
@@ -154,16 +154,16 @@ def test_parent_resolves_real_edustudent_without_switching(client):
 
 
 def test_student_timetable_at_lookup_carries_student_and_lessons(client):
-    res = m._student_timetable_at(client, SUB, "Viktor Hrubý", None, D)
+    res = m._student_timetable_at(client, SUB, "Anna Nováková", None, D)
     assert res is not None
-    assert res["student_id"] == 569595
-    assert res["student"] == "Viktor Hrubý"
+    assert res["student_id"] == 111223
+    assert res["student"] == "Anna Nováková"
     assert len(res["lessons"]) == 1
     assert res["_student_obj"] is not None
 
 
 def test_get_student_timetable_tool_no_longer_errors(client):
-    res = m.get_student_timetable(student_id=569595, subdomain=SUB)
+    res = m.get_student_timetable(student_id=111223, subdomain=SUB)
     assert not res.get("isError")
     results = res.get("results") or []
     assert len(results) == 1
@@ -174,12 +174,12 @@ def test_get_student_timetable_tool_no_longer_errors(client):
 
 def test_get_day_summary_single_call_all_sections(client, monkeypatch):
     _disable_public_meal_widget(monkeypatch)
-    res = m.get_day_summary(name="Viktor Hrubý", date_str="2026-09-10", subdomain=SUB)
+    res = m.get_day_summary(name="Anna Nováková", date_str="2026-09-10", subdomain=SUB)
     assert not res.get("isError")
     results = res.get("results") or []
     assert len(results) == 1
     r0 = results[0]
-    assert r0["student"]["name"] == "Viktor Hrubý"
+    assert r0["student"]["name"] == "Anna Nováková"
     sections = r0.get("sections", {})
     # Single call must deliver the whole report, timetable included.
     expected = {
@@ -194,11 +194,63 @@ def test_get_day_summary_single_call_all_sections(client, monkeypatch):
 
 
 def test_get_day_summary_auto_discovers_every_child(client, monkeypatch):
+    """Default (parent, no student named) returns a lightweight per-school
+    discovery index — NOT full per-child reports. Keeps the payload small and
+    avoids mixing children across schools / timeouts with many children."""
     _disable_public_meal_widget(monkeypatch)
     res = m.get_day_summary(date_str="2026-09-10", subdomain=SUB)
     assert not res.get("isError")
+    assert res.get("mode") == "discovery"
+    results = res.get("results") or []
+    assert len(results) == 1, results
+    students = results[0].get("students") or []
+    names = {s["name"] for s in students}
+    assert {"Anna Nováková", "Boris Šikovný"} == names
+    for s in students:
+        assert s["student_id"] is not None
+    assert all("sections" not in r for r in results), "discovery must not fetch full sections"
+    # No per-child timetable fetches happen during a pure discovery call.
+    assert client.calls["get_timetable"] == 0
+
+
+def test_get_day_summary_full_builds_every_child_report(client, monkeypatch):
+    """full=True keeps the old all-children behavior: one full report per child."""
+    _disable_public_meal_widget(monkeypatch)
+    res = m.get_day_summary(date_str="2026-09-10", subdomain=SUB, full=True)
+    assert not res.get("isError")
     children = res.get("results") or []
     names = {c["student"]["name"] for c in children}
-    assert {"Viktor Hrubý", "Tamara Hrubá"} == names
+    assert {"Anna Nováková", "Boris Šikovný"} == names
     for child in children:
         assert child["sections"]["timetable"].get("ok") is True
+
+
+def test_discovery_subdomains_limited_to_env(monkeypatch):
+    """When EDUPAGE_SUBDOMAINS is set, discovery never touches unconfigured schools."""
+    monkeypatch.setattr(m, "EDUPAGE_SUBDOMAINS", "schoola,schoolb")
+    m._clients["unconfigured-school"] = None
+    assert m._discovery_subdomains() == ["schoola", "schoolb"]
+
+
+def test_discovery_subdomains_falls_back_to_all_clients(monkeypatch):
+    """When EDUPAGE_SUBDOMAINS is unset, discovery scans every logged-in client."""
+    monkeypatch.setattr(m, "EDUPAGE_SUBDOMAINS", "")
+    m._clients["schoola"] = object()
+    m._clients["schoolb"] = object()
+    m._clients[None] = None
+    assert m._discovery_subdomains() == ["schoola", "schoolb"]
+
+
+def test_get_day_summary_scans_only_configured_subdomains(client, monkeypatch):
+    """No-name discovery report only covers EDUPAGE_SUBDOMAINS schools, even when
+    extra sessions exist. Prevents the cross-school mixing from previous runs."""
+    _disable_public_meal_widget(monkeypatch)
+    monkeypatch.setattr(m, "EDUPAGE_SUBDOMAINS", SUB)
+    other = FakeClient([VIKTOR])
+    m._clients["unconfigured-school"] = other
+    m._roles["unconfigured-school"] = "parent"
+    res = m.get_day_summary(date_str="2026-09-10")
+    assert not res.get("isError")
+    assert res.get("mode") == "discovery"
+    results = res.get("results") or []
+    assert [s["subdomain"] for s in results] == [SUB]
