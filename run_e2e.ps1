@@ -10,7 +10,8 @@ cvcmalacky is out of scope and is automatically stripped.
 #>
 $ErrorActionPreference = "Stop"
 
-$Missing = @("EDUPAGE_USERNAME", "EDUPAGE_PASSWORD", "EDUPAGE_SUBDOMAINS") | Where-Object { -not $env:$_ }
+$Required = @("EDUPAGE_USERNAME", "EDUPAGE_PASSWORD", "EDUPAGE_SUBDOMAINS")
+$Missing = @($Required | Where-Object { -not [Environment]::GetEnvironmentVariable($_) })
 if ($Missing) {
     Write-Error "Missing env var(s): $($Missing -join ', '). Set them (e.g. from .env) then re-run."
     exit 1
