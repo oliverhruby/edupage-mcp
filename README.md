@@ -461,8 +461,8 @@ fully automatic.
 | `get_news` | School news |  |
 | `get_timetable_changes` | Substitutions / timetable changes for a date |  |
 | `get_missing_teachers` | Teachers missing on a date |  |
-| `get_day_summary` | One-call daily report (timetable, substitutions, teachers, grades, meals, homework, assignments, absences, news, events, notifications) for a date; student by name/id (role-aware). **Discovery-first**: parent without `name`/`student_id` returns a lightweight per-school student index (`mode:"discovery"`); pass `full=True` to build full reports for every child. Bundles OpenCode skill `school-day-summary` for human-readable output. |  |
-| `get_meals` | Meal menu (snack/lunch/afternoon snack; `include_breakfast`/`include_dinner` add extras) |  |
+| `get_day_summary` | One-call daily report (timetable, substitutions, teachers, grades, meals incl. breakfast/dinner when published, homework, assignments, absences, news, events, notifications) for a date; student by name/id (role-aware). **Discovery-first**: parent without `name`/`student_id` returns a lightweight per-school student index (`mode:"discovery"`); pass `full=True` to build full reports for every child. Bundles OpenCode skill `school-day-summary` for human-readable output. |  |
+| `get_meals` | Meal menu (all 5 slots: breakfast, snack, lunch, afternoon snack, dinner) |  |
 | `choose_meal` | Order a meal | ✅ |
 | `sign_off_meal` | Cancel an ordered meal | ✅ |
 | `rate_meal` | Rate a meal (quality/quantity) | ✅ |
@@ -497,9 +497,9 @@ fully automatic.
   matching identifiers; not all schools expose ratings.
 - `get_meals` first tries the per-student meal-ordering endpoint (needed for
   ordering/ratings). When a school doesn't enable that, it falls back to the
-  school's **public canteen menu widget** (`/menu/?wid=menu_CanteenMenu_1`),
-  which is read-only (no ordering) and may include extra meals — pass
-  `include_breakfast=true` / `include_dinner=true` to also get Raňajky/Večera.
+  school's **public canteen menu widget** (`/menu/?wid=menu_CanteenMenu_1`).
+  All five slots (breakfast/snack/lunch/afternoon_snack/dinner) are always
+  returned; slots the school doesn't publish are ``None``.
 
 ---
 
