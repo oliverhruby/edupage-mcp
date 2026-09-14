@@ -20,6 +20,7 @@ import re
 import sys
 import time
 import unicodedata
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from urllib.parse import urlparse
 from dataclasses import fields, is_dataclass
 from datetime import date, datetime, time as dt_time
@@ -425,6 +426,22 @@ class _StaticApiKeyTokenVerifier:
         return AccessToken(token=token, client_id="mcp-api-key", scopes=["mcp"])  # type: ignore[misc]
 
 
+_APP_DIST = "edupage-mcp-full"
+
+
+def _server_version() -> str:
+    """Our published package version, from the installed distribution metadata.
+
+    Single source of truth is `version` in pyproject.toml. Both PyPI wheels and
+    the Docker image install this package via `pip`, so importlib.metadata
+    resolves the same number everywhere. Falls back to "dev" only for bare
+    source checkouts (not pip-installed)."""
+    try:
+        return _pkg_version(_APP_DIST)
+    except PackageNotFoundError:
+        return "dev"
+
+
 if FastMCP:
     token_verifier = None
     auth_settings = None
@@ -443,6 +460,11 @@ if FastMCP:
         auth=auth_settings,
         token_verifier=token_verifier,
     )
+    # FastMCP 1.x exposes no `version` parameter and the lowlevel Server falls
+    # back to pkg_version("mcp"), so `initialize` would report the *mcp SDK*
+    # version instead of ours. Pin it to our own distribution version so the
+    # serverInfo advertises the version we published on PyPI / as a container.
+    server._mcp_server.version = _server_version()
 else:
     server = None
 
