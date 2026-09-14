@@ -1469,11 +1469,17 @@ def _fetch_novylistok(client, day):
     return result
 
 
-def _meals_payload(client, d, sub, include_breakfast=False, include_dinner=False):
+_ALL_MEAL_SLOTS = ("breakfast", "snack", "lunch", "afternoon_snack", "dinner")
+
+
+def _meals_payload(client, d, sub):
     """Meal menu payload for a date: personal ordering endpoint first, then the
-    school's public canteen widget. Returns a dict keyed by meal slot -> plain
-    meal dict (or None). Pure function usable by both get_meals and
+    school's public canteen widget. Always returns all five meal slots
+    (breakfast/snack/lunch/afternoon_snack/dinner) — slots not published by
+    the school are ``None``.  Pure function usable by both get_meals and
     get_day_summary."""
+    _none = {k: None for k in _ALL_MEAL_SLOTS}
+
     meals = None
     try:
         meals = client.get_meals(d)
@@ -1485,41 +1491,55 @@ def _meals_payload(client, d, sub, include_breakfast=False, include_dinner=False
             meals = client.get_meals(d)
         else:
             raise
-    if meals is None or not any(getattr(meals, m) for m in ("snack", "lunch", "afternoon_snack")):
-        for fetch in (_fetch_canteen_menu, _fetch_novylistok):
+
+    # Path 1: personal endpoint has at least one of snack/lunch/afternoon_snack.
+    # Supplement missing breakfast/dinner from the public canteen widget.
+    if meals is not None and any(getattr(meals, m) for m in ("snack", "lunch", "afternoon_snack")):
+        meals_data = _serialize(meals)
+        for slot in _ALL_MEAL_SLOTS:
+            meals_data.setdefault(slot, None)
+        if not meals_data["breakfast"] or not meals_data["dinner"]:
+            for fetch in (_fetch_canteen_menu, _fetch_novylistok):
+                try:
+                    extra = fetch(client, d)
+                except Exception:
+                    extra = None
+                if extra is None:
+                    continue
+                if not meals_data["breakfast"]:
+                    meals_data["breakfast"] = extra.get("breakfast")
+                if not meals_data["dinner"]:
+                    meals_data["dinner"] = extra.get("dinner")
+                break
+        return meals_data
+
+    # Path 2: personal endpoint unavailable — try the public widget for all slots.
+    for fetch in (_fetch_canteen_menu, _fetch_novylistok):
+        try:
             extra = fetch(client, d)
-            if extra is None:
-                continue
-            meals_data = {k: extra[k] for k in ("snack", "lunch", "afternoon_snack")}
-            if include_breakfast or include_dinner:
-                meals_data["breakfast"] = extra.get("breakfast") if include_breakfast else None
-                meals_data["dinner"] = extra.get("dinner") if include_dinner else None
-            return meals_data
-    meals_data = _serialize(meals) if meals is not None else None
-    if include_breakfast or include_dinner:
-        if meals_data is None:
-            meals_data = {k: None for k in ("snack", "lunch", "afternoon_snack")}
-        meals_data["breakfast"] = None if include_breakfast else meals_data.get("breakfast")
-        meals_data["dinner"] = None if include_dinner else meals_data.get("dinner")
-    return meals_data
+        except Exception:
+            extra = None
+        if extra is None:
+            continue
+        return {k: extra.get(k) for k in _ALL_MEAL_SLOTS}
+
+    return _none
 
 
 @_tool
-def get_meals(date_str: str = None, include_breakfast: bool = False,
-              include_dinner: bool = False, subdomain: str = None) -> dict:
-    """Get the meal menu (snack/lunch/afternoon snack) for a date (default today).
+def get_meals(date_str: str = None, subdomain: str = None) -> dict:
+    """Get the meal menu for a date (default today). Always returns all five
+    meal slots (breakfast, snack, lunch, afternoon_snack, dinner) — slots not
+    published by the school are ``None``.
 
     Tries the personal meal-ordering endpoint first; when the school hasn't
-    enabled it, falls back to the school's public canteen menu widget. By
-    default only snack/lunch/afternoon_snack are returned; set
-    include_breakfast / include_dinner to also include those extra meals
-    (only available via the public widget)."""
+    enabled it, falls back to the school's public canteen menu widget."""
     def go():
         client = _require_client(subdomain)
         d = _parse_date(date_str)
         sub = _resolve_subdomain(subdomain)
         return {"date": d.isoformat(), "subdomain": sub,
-                "meals": _meals_payload(client, d, sub, include_breakfast, include_dinner)}
+                "meals": _meals_payload(client, d, sub)}
 
     return _run(go, "get_meals")
 
