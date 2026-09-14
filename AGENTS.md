@@ -81,6 +81,11 @@ logic. Do not grow a scraping layer here.
   `get_schools`.
 - **JSON output.** Return plain JSON serialisable via `_serialize` (handles
   dataclasses, enums, `datetime`). Don't return raw `edupage-api` objects.
+- **Server identity / version.** FastMCP 1.x has no `version` param and would
+  report the mcp SDK version. `__init__.py` pins it via
+  `server._mcp_server.version = _server_version()`, which reads the installed
+  dist version for `_APP_DIST` ("edupage-mcp-full"). Keep `_APP_DIST` in sync
+  with `pyproject.toml`.
 
 ## Git commit policy
 
