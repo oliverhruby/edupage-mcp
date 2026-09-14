@@ -67,7 +67,7 @@ Render a concise markdown report titled with the date (e.g.
 - **Zastupovanie / zmeny (Substitutions)** — only if there are changes; say
   "bez zmien" otherwise.
 - **Chýbajúci učitelia (Missing teachers)** — teachers absent that day.
-- **Jedálny lístok (Meals)** — snack/lunch/afternoon snacks with main foods.
+- **Jedálny lístok (Meals)** — breakfast/snack/lunch/afternoon snack/dinner with main foods (slots the school doesn't publish are `None`).
 - **Známky (Grades)** — grades received that day.
 - **Domáce úlohy / písomky (Homework / tests)** — assignments for that date.
 - **Udalosti / správy / absencie (Events / news / absences)** — anything notable.
