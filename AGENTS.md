@@ -46,6 +46,13 @@ logic. Do not grow a scraping layer here.
   - `_run` wraps exceptions → returns `{"isError": True, ...}` (JSON-RPC result).
   - Sub-tools that need parsing helpers should reuse `_serialize`, `_parse_date`,
     `_resolve_target`, `_find_student` rather than reimplementing.
+  - **Tool count is a design constraint.** Prefer a small number of distinct
+    tools with a discriminating `param=` over many near-identical ones (the
+    consolidated `login`/`get_timeline`/`get_roster`/`get_timetable` families
+    are the model). Every tool's docstring must carry a Google-style `Args:`
+    block (FastMCP exposes it as per-parameter JSON-schema descriptions) and,
+    where relevant, a cross-reference telling agents which sibling to use
+    instead — this is what the TDQS reviews score.
 - **Read-only vs write.** `get_*` tools read only. Tools that send messages,
   order meals, or switch accounts write — say so in the docstring, and mark in
   the README tool table.
