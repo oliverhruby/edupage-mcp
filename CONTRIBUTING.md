@@ -64,8 +64,10 @@ Tools resolve clients through `_require_client(subdomain)`.
 
 ### 2FA flow
 
-- `two_factor_check_confirmed`: checks whether device confirmation is approved.
-- `two_factor_finish`: completes 2FA via device or explicit code.
+A single `two_factor_finish` tool resolves a pending 2FA login: with a `code`
+(emailed/app) it completes directly; without one it polls the
+device-confirmation flag for up to `poll_seconds` (default 60) and returns a
+pending status that can be retried.
 
 ### Serialization and errors
 

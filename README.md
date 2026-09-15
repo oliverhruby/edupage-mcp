@@ -96,14 +96,19 @@ This project deliberately goes further:
 
 ## What it provides
 
-A single stdio MCP server exposing **46 tools** (published on PyPI as
+A single stdio MCP server exposing **29 tools** (published on PyPI as
 [`edupage-mcp-full`](https://pypi.org/project/edupage-mcp-full/)):
 
-- **Authentication** — `login`, `login_auto`, `login_all`, `login_from_session`,
-  `two_factor_check_confirmed`, `two_factor_finish`, `auth_status`, `user_id`
+- **Authentication** — `login` (by credentials, portal auto-detect, or a
+  `PHPSESSID` cookie via `method=`), `login_all` (multi-school, one call),
+  `two_factor_finish` (complete a pending 2FA), `get_schools` (logged-in
+  schools with role/user id per school + env config). The former `auth_status`,
+  `user_id`, `login_auto`, `login_from_session`, and
+  `two_factor_check_confirmed` tools are folded into these.
 - **Timetables** — `get_my_timetable`, `get_timetable` (teacher/student/class/
-  classroom), `get_student_timetable` (student by name, cross-school),
-  `get_next_week_timetable`, `get_next_ringing_time`, `get_periods`, `school_year`
+  classroom; `end_date` for a range, formerly `get_timetable_range`),
+  `get_student_timetable` (student by name, cross-school), `get_next_week_timetable`,
+  `get_next_ringing_time`, `get_periods`, `get_school_year`
 - **Students** — `find_student` (name → person_id, cross-school),
   `get_student_timetable` (cross-school, role-aware), `scan_students`
   (auto-discover all students across schools), `get_my_students` (classmates or
@@ -111,8 +116,8 @@ A single stdio MCP server exposing **46 tools** (published on PyPI as
   `switch_to_parent`, `clear_student_cache` (force refresh cached student lists)
 - **Schools** — `get_schools` (logged-in schools with role per school)
 - **Grades** — `get_grades`
-- **Notifications / timeline** — `get_notifications`, `get_notification_history`,
-  `get_homework`, `get_assignments`, `get_absences`, `get_upcoming_events`, `get_news`
+- **Timeline / notifications** — `get_timeline` (`category=` for homework,
+  assignments, absences, events, news, or full history since a date)
 - **Substitutions** — `get_timetable_changes`, `get_missing_teachers`
 - **Meals** — `get_meals`, `choose_meal`, `sign_off_meal`, `rate_meal`
 - **Day summaries** — `get_day_summary` (one call: timetable, substitutions,
@@ -121,8 +126,8 @@ A single stdio MCP server exposing **46 tools** (published on PyPI as
   single round trip; each section is isolated so one failure doesn't kill the
   report). Includes an OpenCode skill (`school-day-summary`) for human-readable
   formatting in OpenCode; other clients use the raw JSON directly.
-- **Rosters** — `get_students`, `get_all_students`, `get_teachers`, `get_classes`,
-  `get_classrooms`, `get_subjects`, `get_my_students`
+- **Rosters** — `get_roster` (`roster_type=` for students, all students,
+  teachers, classes, classrooms, or subjects), `get_my_students`
 - **Actions** — `send_message`, `switch_to_student`, `switch_to_parent`, `custom_request`
 
 ---
@@ -347,14 +352,14 @@ After editing client config, **restart the client** so the MCP server is loaded.
 
 | User prompt | Likely tool call(s) | Expected response |
 |---|---|---|
-| "Are we connected and logged in?" | `auth_status` | Connected status, active school/subdomain, and login state per school. |
+| "Are we connected and logged in?" | `get_schools` | Connected status, active school/subdomain, env config, and login state per school. |
 | "What classes do I have today?" | `get_my_timetable` | A short timetable summary for today. |
 | "Show me the 9.A schedule for 2026-09-10" | `get_timetable target_type="class" target_id="9.A" date_str="2026-09-10"` | Class timetable for that date. |
 | "What grades do I have this term?" | `get_grades term="FIRST" year=2026` | Subject-by-subject grade overview for the selected term/year. |
 | "Any substitutions today?" | `get_timetable_changes` | Changes, cancellations, and replacements for today. |
 | "What is for lunch and order option 2 for tomorrow" | `get_meals` → `choose_meal date_str="2026-09-10" meal_type="lunch" number=2` | Meal menu and order confirmation (or a clear error if unavailable). |
 | "Find Student A's timetable for tomorrow" | `get_student_timetable name="Student A" date_str="2026-09-10"` | Student A's timetable; if found in multiple schools, one result per school. |
-| "List teachers and send a hello to Teacher456" | `get_teachers` → `send_message recipient_id="Teacher456" body="Hello!"` | Teacher list plus message sent confirmation. |
+| "List teachers and send a hello to Teacher456" | `get_roster roster_type="teachers"` → `send_message recipient_id="Teacher456" body="Hello!"` | Teacher list plus message sent confirmation. |
 | **"What happened at school yesterday for my kids?"** | `get_day_summary date_str="2026-09-09"` (discovery index) → `get_day_summary date_str="2026-09-09" name="Student A" subdomain="school-a"` → `... name="Student B" subdomain="school-b"` | **Discovery-first**: the no-name call lists each child per school; then one complete daily report call per child (timetable, substitutions, missing teachers, grades, meals, homework, assignments, absences, news, events, notifications). Keeps each response small and avoids mixing schools/students. |
 | **"How was school today for Student A?"** | `get_day_summary name="Student A"` (defaults to today) | Human-readable summary via the bundled OpenCode skill `school-day-summary`. |
 
@@ -391,7 +396,7 @@ login_all subdomains="school1,school2" usernames="u1,u2" passwords="p1,p2"
 
 get_my_timetable subdomain="school1"
 get_my_timetable subdomain="school2"
-auth_status          # shows all logged-in subdomains + which is active
+get_schools          # shows all logged-in subdomains + which is active
 ```
 
 You can also call `login` once per school to add/lookup sessions incrementally.
@@ -436,29 +441,19 @@ fully automatic.
 
 | Tool | Description | Writes? |
 |---|---|---|
-| `login` | Log in with username/password/subdomain (env vars supported) | ✅ session |
-| `login_auto` | Log in via the EduPage portal (auto-detect school) | ✅ session |
+| `login` | Log in with username/password; `method="credentials"` (default), `method="auto"` (portal auto-detect, formerly `login_auto`), or `method="session"` with a `PHPSESSID` cookie (formerly `login_from_session`). Env vars supported. | ✅ session |
 | `login_all` | Log in to multiple schools in one call | ✅ session |
-| `login_from_session` | Create a session from an existing `PHPSESSID` cookie | ✅ session |
-| `two_factor_check_confirmed` | Check if 2FA was approved on a device |  |
-| `two_factor_finish` | Finish 2FA (email/app code or device confirmation) | ✅ session |
-| `auth_status` | Which subdomains are logged in + active one |  |
-| `user_id` | Logged-in user id |  |
-| `school_year` | Current school year |  |
+| `two_factor_finish` | Finish a pending 2FA login (email/app `code` or `poll_seconds` device confirmation; formerly `two_factor_check_confirmed` + `two_factor_finish`) | ✅ session |
+| `get_schools` | Logged-in schools + role/user id per school, active subdomain, failed logins, env config (formerly `auth_status`, `user_id`) |  |
+| `get_school_year` | Current school year |  |
 | `get_my_timetable` | Logged-in user's timetable for a date |  |
-| `get_timetable` | Timetable of a teacher/student/class/classroom |  |
+| `get_timetable` | Timetable of a teacher/student/class/classroom; `end_date` for a daily range (formerly `get_timetable_range`) |  |
 | `get_student_timetable` | Student's timetable by name or id (role-aware, cross-school) | ✅ session |
 | `get_next_week_timetable` | Mon–Fri timetable for next week |  |
 | `get_next_ringing_time` | Next bell (break/lesson) at a given time |  |
 | `get_periods` | Bell schedule (period start/end times) |  |
 | `get_grades` | Grades, optionally by year & term |  |
-| `get_notifications` | Timeline notifications |  |
-| `get_notification_history` | Timeline notifications since a date |  |
-| `get_homework` | Homework from the timeline |  |
-| `get_assignments` | Homework/tests/exams from the timeline |  |
-| `get_absences` | Absence records from the timeline |  |
-| `get_upcoming_events` | Trips/excursions/meetings/holidays |  |
-| `get_news` | School news |  |
+| `get_timeline` | Timeline notifications, one `category=` at a time: `recent`, `history` (since `date_from`), `homework`, `assignments`, `absences`, `events`, `news` (formerly `get_notifications`, `get_notification_history`, `get_homework`, `get_assignments`, `get_absences`, `get_upcoming_events`, `get_news`) |  |
 | `get_timetable_changes` | Substitutions / timetable changes for a date |  |
 | `get_missing_teachers` | Teachers missing on a date |  |
 | `get_day_summary` | One-call daily report (timetable, substitutions, teachers, grades, meals incl. breakfast/dinner when published, homework, assignments, absences, news, events, notifications) for a date; student by name/id (role-aware). **Discovery-first**: parent without `name`/`student_id` returns a lightweight per-school student index (`mode:"discovery"`); pass `full=True` to build full reports for every child. Bundles OpenCode skill `school-day-summary` for human-readable output. |  |
@@ -466,12 +461,7 @@ fully automatic.
 | `choose_meal` | Order a meal | ✅ |
 | `sign_off_meal` | Cancel an ordered meal | ✅ |
 | `rate_meal` | Rate a meal (quality/quantity) | ✅ |
-| `get_students` | Students in the logged-in user's class |  |
-| `get_all_students` | All students in the school (short list) |  |
-| `get_teachers` | All teachers |  |
-| `get_classes` | All classes |  |
-| `get_classrooms` | All classrooms |  |
-| `get_subjects` | All subjects |  |
+| `get_roster` | One `roster_type=` at a time: `students` (logged-in user's class), `all_students` (whole school, short list), `teachers`, `classes`, `classrooms`, `subjects` (formerly `get_students`, `get_all_students`, `get_teachers`, `get_classes`, `get_classrooms`, `get_subjects`) |  |
 | `get_my_students` | Students visible to the logged-in account (one school) |  |
 | `find_student` | Look up a student's person_id by name (cross-school) |  |
 | `scan_students` | Auto-discover students across the configured `EDUPAGE_SUBDOMAINS` (or all logged-in schools when unset) |  |
@@ -488,9 +478,9 @@ fully automatic.
 
 - Most tools are **read-only**. The ones marked **Writes? ✅** mutate EduPage
   state (sent messages, ordered meals, switched accounts). Use them with care.
-- `get_homework`, `get_assignments`, `get_absences`, `get_upcoming_events` and
-  `get_news` derive their data from the **timeline notifications** — if the
-  school doesn't push certain event types, those tools may return empty lists.
+- `get_timeline` categories `homework`, `assignments`, `absences`, `events` and
+  `news` derive their data from the **timeline notifications** — if the school
+  doesn't push certain event types, those categories may return empty lists.
 - `get_missing_teachers` is marked **experimental** upstream (parses HTML from
   the substitution page) and can raise if a teacher's name no longer matches.
 - Meal `rate_meal` and ordering depend on the school publishing menus with the
@@ -541,7 +531,7 @@ Contributor and maintainer guidance is in [CONTRIBUTING.md](CONTRIBUTING.md).
 - **Unofficial/read-mostly by design.** EduPage can change its endpoints at any
   time; reliability ultimately depends on `edupage-api`, not this wrapper.
 - **No CAPTCHA bypass.** If EduPage presents a CAPTCHA during login, log in via
-  browser first, then use `login_from_session` with the resulting `PHPSESSID`.
+  browser first, then use `login method="session"` with the resulting `PHPSESSID`.
 - **2FA requires human interaction** (approve on device or provide a code).
 - **Parent/teacher accounts** are only partially verified upstream; some parent
   methods are best-effort.
