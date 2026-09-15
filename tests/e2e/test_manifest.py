@@ -28,9 +28,6 @@ WRITE_TOOLS = {
 AUTH_OR_LOCAL = {
     "login",
     "login_all",
-    "login_auto",
-    "login_from_session",
-    "two_factor_check_confirmed",
     "two_factor_finish",
     "clear_student_cache",
 }

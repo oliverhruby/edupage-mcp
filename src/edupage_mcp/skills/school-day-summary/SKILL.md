@@ -49,9 +49,9 @@ tomorrow".
 4. **Fall back to individual tools if needed.** If `get_day_summary` is not
    available (older server), compose from the standard tools:
    `get_student_timetable` (or `get_my_timetable`), `get_timetable_changes`,
-   `get_missing_teachers`, `get_grades`, `get_meals`, `get_homework`,
-   `get_assignments`, `get_absences`, `get_upcoming_events`, `get_news`,
-   `get_notifications`.
+   `get_missing_teachers`, `get_grades`, `get_meals`, and `get_timeline` with
+   `category="assignments"`, `category="absences"`, `category="events"`,
+   `category="news"`, or `category="recent"`.
 
 5. **Per-section handling.** Each section has `"ok": true/false`. Treat a
    `false` section as "no data / not available" for that school — do not

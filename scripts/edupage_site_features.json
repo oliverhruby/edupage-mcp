@@ -8,7 +8,7 @@
       "label": "Login / 2FA / multi-school",
       "roles": ["student", "parent", "teacher"],
       "library_methods": ["login", "login_auto", "login_all", "login_from_session", "TwoFactorLogin"],
-      "tools": ["login", "login_auto", "login_all", "login_from_session", "two_factor_check_confirmed", "two_factor_finish", "two_factor_completion_request"],
+      "tools": ["login", "login_all", "two_factor_finish"],
       "status": "covered",
       "status_reason": "Library plus wrapper cover portal login, 2FA device confirmation, and per-subdomain sessions.",
       "next_steps": []
@@ -28,7 +28,7 @@
       "label": "Timetable (daily / range / next week / per-student)",
       "roles": ["student", "parent", "teacher"],
       "library_methods": ["get_timetable"],
-      "tools": ["get_my_timetable", "get_timetable", "get_timetable_range", "get_next_week_timetable", "get_student_timetable"],
+      "tools": ["get_my_timetable", "get_timetable", "get_next_week_timetable", "get_student_timetable"],
       "status": "covered",
       "status_reason": "Full timetable surface is exposed; note get_timetable/get_student_timetable occasionally raise UnknownServerError on some accounts.",
       "next_steps": ["Investigate UnknownServerError('NoneType' object has no attribute 'get') seen for iprskola."]
@@ -48,7 +48,7 @@
       "label": "Homework, tests, exams, projects (timeline)",
       "roles": ["student", "parent"],
       "library_methods": ["get_homework", "get_assignments", "get_timeline_notifications"],
-      "tools": ["get_homework", "get_assignments", "get_notifications", "get_notification_history"],
+      "tools": ["get_timeline"],
       "status": "covered",
       "status_reason": "Timeline-derived homework/assignments/notifications are exposed.",
       "next_steps": []
@@ -68,7 +68,7 @@
       "label": "Events, news, absences, periods/bell schedule",
       "roles": ["student", "parent"],
       "library_methods": ["get_upcoming_events", "get_news", "get_absences", "get_periods", "get_ringing"],
-      "tools": ["get_upcoming_events", "get_news", "get_absences", "get_periods", "get_next_ringing_time"],
+      "tools": ["get_timeline", "get_periods", "get_next_ringing_time"],
       "status": "covered",
       "status_reason": "School-level read features are exposed.",
       "next_steps": []
@@ -90,7 +90,7 @@
       "library_methods": ["send_message"],
       "tools": ["send_message"],
       "status": "partial",
-      "status_reason": "Sending works; reading the inbox is only surfaced indirectly through timeline notifications (get_notifications/get_notification_history). There is no full message-thread listing.",
+      "status_reason": "Sending works; reading the inbox is only surfaced indirectly through timeline notifications (get_timeline). There is no full message-thread listing.",
       "next_steps": ["Feature-layer module to list/summarize message threads from the communication app."]
     },
     {
@@ -120,7 +120,7 @@
       "url_note": "/calendar/",
       "roles": ["student", "parent", "teacher"],
       "library_methods": [],
-      "tools": ["get_upcoming_events"],
+      "tools": ["get_timeline"],
       "status": "missing",
       "status_reason": "Upcoming events come from the timeline feed; the rich calendar app is not covered.",
       "next_steps": ["Feature-layer module to read the calendar grid."]

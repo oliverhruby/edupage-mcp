@@ -57,8 +57,8 @@ jobs:
                       await session.initialize()
                       tools = await session.list_tools()
                       items = getattr(tools, "tools", []) or []
-                      if len(items) < 40:
-                          raise SystemExit(f"Expected >=40 tools, got {len(items)}")
+                      if len(items) < 28:
+                          raise SystemExit(f"Expected >=28 tools, got {len(items)}")
                       print(f"MCP smoke OK, tools={len(items)}")
 
           asyncio.run(main())
