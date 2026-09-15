@@ -35,14 +35,13 @@ def _next_weekday(today=None):
 
 
 TOOLS = {
-    "auth_status": {},
-    "user_id": {"subdomain": "@sub"},
-    "school_year": {"subdomain": "@sub"},
+    "get_school_year": {"subdomain": "@sub"},
     "get_my_timetable": {"subdomain": "@sub", "date_str": _next_weekday().isoformat()},
-    "get_timetable": {"target_type": "student", "target_id": "569595", "subdomain": "@sub"},
-    "get_timetable_range": {
+    # Range mode (end_date) exercises the former get_timetable_range path; each
+    # day short-circuits through _target_timetable_day.
+    "get_timetable": {
         "target_type": "student", "target_id": "569595",
-        "start_date": "2026-09-07", "end_date": "2026-09-11", "subdomain": "@sub",
+        "date_str": "2026-09-07", "end_date": "2026-09-11", "subdomain": "@sub",
     },
     "get_next_ringing_time": {"subdomain": "@sub"},
     "get_next_week_timetable": {"subdomain": "@sub"},
@@ -52,26 +51,18 @@ TOOLS = {
     # except branch never assigns percent). Tracked, checked so the suite fails
     # if upstream fixes or changes this.
     "get_grades": {"subdomain": "@sub", "known_error": "cannot access local variable 'percent'"},
-    "get_notifications": {"subdomain": "@sub"},
-    "get_notification_history": {
+    # history mode exercises the client.get_notification_history() upstream path;
+    # 'recent'/other categories are thin filters over get_notifications().
+    "get_timeline": {
+        "category": "history",
         "date_from": (dt.date.today() - dt.timedelta(days=14)).isoformat(),
         "subdomain": "@sub",
     },
-    "get_homework": {"subdomain": "@sub"},
-    "get_assignments": {"subdomain": "@sub"},
-    "get_absences": {"subdomain": "@sub"},
-    "get_upcoming_events": {"subdomain": "@sub"},
-    "get_news": {"subdomain": "@sub"},
     "get_timetable_changes": {"subdomain": "@sub"},
     "get_missing_teachers": {"subdomain": "@sub"},
     "get_meals": {"date_str": _next_weekday().isoformat(), "subdomain": "@sub"},
     "get_day_summary": {"subdomain": "@sub"},
-    "get_students": {"subdomain": "@sub"},
-    "get_all_students": {"subdomain": "@sub"},
-    "get_teachers": {"subdomain": "@sub"},
-    "get_classes": {"subdomain": "@sub"},
-    "get_classrooms": {"subdomain": "@sub"},
-    "get_subjects": {"subdomain": "@sub"},
+    "get_roster": {"roster_type": "teachers", "subdomain": "@sub"},
     "get_my_students": {"subdomain": "@sub"},
     # Deliberately probe tiered matching with a non-existent name; expects the
     # documented graceful "no student" error. No real names are committed.
