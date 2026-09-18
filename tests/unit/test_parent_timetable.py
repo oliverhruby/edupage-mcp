@@ -112,8 +112,11 @@ class FakeClient:
 
 
 @pytest.fixture(autouse=True)
-def _clean_module_state():
-    """Isolate module-global session/cache state between tests."""
+def _clean_module_state(monkeypatch):
+    """Isolate module-global session/cache state between tests and pin the
+    EDUPAGE_SUBDOMAINS allowlist to this file's test school so the run is
+    independent of whatever the developer machine's real env var is set to."""
+    monkeypatch.setattr(m, "EDUPAGE_SUBDOMAINS", SUB)
     saved = dict(m._clients), dict(m._roles), dict(m._student_cache)
     m._clients.clear()
     m._roles.clear()

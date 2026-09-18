@@ -148,24 +148,40 @@ def _resolve_subdomain(subdomain=None):
     return _active_subdomain
 
 
+def _scope_error(sub):
+    """Return a user-facing error when `sub` lies outside the EDUPAGE_SUBDOMAINS scope.
+
+    With EDUPAGE_SUBDOMAINS set, it is a required allowlist: an unconfigured
+    school must never be presented as a login candidate, used as an auto-relogin
+    target, or queried — even if a stale client/session for it happens to exist
+    in `_clients`. Returns None when `sub` is inside scope or scope is unset
+    (auto-discovery mode allows every subdomain)."""
+    if _subdomain_is_configured(sub):
+        return None
+    configured = _configured_subdomains()
+    scope = ", ".join(configured) if configured else "<unset>"
+    return (f"Subdomain '{sub}' is not configured in EDUPAGE_SUBDOMAINS "
+            f"(current scope: {scope}). Add it to the configured list and "
+            f"restart the server, or leave EDUPAGE_SUBDOMAINS empty for "
+            f"auto-discovery. No login can be attempted for an unconfigured school.")
+
+
 def _login_block_message(sub):
     """Return a user-facing reason why `sub` cannot be queried, or None if usable.
 
-    A session is blocked when there is no logged-in client, a startup/login
-    failure was recorded for the subdomain, or 2FA was never finished. Callers
-    must surface this as a login prompt — never treat a session problem as an
-    empty result list."""
+    A session is blocked when `sub` is outside the configured EDUPAGE_SUBDOMAINS
+    scope, when there is no logged-in client, a startup/login failure was
+    recorded for the subdomain, or 2FA was never finished. Callers must surface
+    this as a login prompt — never treat a session problem as an empty result
+    list. The scope gate runs FIRST: with EDUPAGE_SUBDOMAINS set, an out-of-scope
+    school is NEVER usable, even if a stale client already exists in `_clients`."""
     if not sub:
         return None
+    scope_err = _scope_error(sub)
+    if scope_err:
+        return scope_err
     client = _clients.get(sub)
     if client is None or not getattr(client, "is_logged_in", False):
-        if not _subdomain_is_configured(sub):
-            configured = _configured_subdomains()
-            scope = ", ".join(configured) if configured else "<unset>"
-            return (f"Subdomain '{sub}' is not configured in EDUPAGE_SUBDOMAINS "
-                    f"(current scope: {scope}). Add it to the configured list and "
-                    f"restart the server, or leave EDUPAGE_SUBDOMAINS empty for "
-                    f"auto-discovery. No login can be attempted for an unconfigured school.")
         msg = f"Not logged in for subdomain '{sub}'. Call `login` (or `login_all` for multiple schools) first."
         failure = _autologin_failures.get(sub)
         if failure:
@@ -546,6 +562,8 @@ def login(
     Notes:
         - Each `login` call adds/replaces that subdomain's session; call
           `login_all` to log into several schools in one call.
+        - When EDUPAGE_SUBDOMAINS is set it is a strict allowlist: login into
+          a school outside it is refused.
         - Prefer setting EDUPAGE_USERNAME / EDUPAGE_PASSWORD (and
           EDUPAGE_SUBDOMAINS for multi-school) — the server then logs in
           automatically at startup.
@@ -561,6 +579,9 @@ def login(
                 raise RuntimeError(
                     "method='session' requires session_id, subdomain and username."
                 )
+            scope_err = _scope_error(subdomain)
+            if scope_err:
+                raise RuntimeError(scope_err)
             client = Edupage.from_session_id(session_id, subdomain, username)
             sub = subdomain
             tf = None
@@ -576,12 +597,18 @@ def login(
                 _autologin_failures[subdomain or "portal"] = f"{type(e).__name__}: {e}"
                 raise
             sub = subdomain or client.subdomain or "auto"
+            scope_err = _scope_error(sub)
+            if scope_err:
+                raise RuntimeError(scope_err)
         elif method == "credentials":
             sub = subdomain or _first_subdomain_from_env()
             if not (user and pwd and sub):
                 raise RuntimeError(
                     "username, password and subdomain must be provided (or set as env vars)."
                 )
+            scope_err = _scope_error(sub)
+            if scope_err:
+                raise RuntimeError(scope_err)
             client = Edupage()
             try:
                 tf = client.login(user, pwd, sub)
@@ -626,8 +653,10 @@ def login_all(subdomains: str = None, usernames: str = None, passwords: str = No
         reported per-entry with its error.
 
     Notes:
-        - Add schools one at a time with `login`; finish any pending 2FA with
-          `two_factor_finish`.
+        - Add schools one at a time with `login`.
+        - When EDUPAGE_SUBDOMAINS is set it is a strict allowlist: schools
+          outside it are refused per-entry without creating a session.
+        - Finish any pending 2FA with `two_factor_finish`.
     """
     global _clients, _two_factor, _active_subdomain
 
@@ -638,6 +667,10 @@ def login_all(subdomains: str = None, usernames: str = None, passwords: str = No
         pwds = [p.strip() for p in (passwords or EDUPAGE_PASSWORD).split(",") if p.strip()] or [EDUPAGE_PASSWORD]
         results = []
         for i, sub in enumerate(subs):
+            scope_err = _scope_error(sub)
+            if scope_err:
+                results.append({"subdomain": sub, "ok": False, "error": scope_err})
+                continue
             user = users[i] if i < len(users) else users[-1]
             pwd = pwds[i] if i < len(pwds) else pwds[-1]
             if not (user and pwd):
@@ -2237,14 +2270,26 @@ def find_student(name: str, subdomain: str = None) -> dict:
 
 
 @_tool
-def get_schools() -> dict:
-    """List all schools the server is logged into (from auto-discovery or
-    `login`/`login_all`), plus overall session status. Read-only.
+def get_subdomains() -> dict:
+    """List the school subdomains available to the logged-in account and the
+    server's session status per school, plus overall login state. Read-only.
+
+    Args:
+        (none)
 
     Returns:
         dict with:
+        - `subdomains`: list of school subdomains available to the account.
+          For a logged-in **parent** account this is live-discovered (via
+          `edupage-api`'s `get_subdomains`, read from the profile page) and
+          includes schools with no session yet; it is limited to
+          `EDUPAGE_SUBDOMAINS` when that is set (allowlist), otherwise every
+          accessible school is listed. For student/teacher accounts or when
+          not logged in it falls back to the configured / current sessions.
         - `schools`: per subdomain {subdomain, logged_in, role
           (student/parent/teacher), user_id, two_factor_pending, active}.
+          When EDUPAGE_SUBDOMAINS is set it contains only the in-scope
+          schools (sessions for unconfigured schools are never listed).
         - `active_subdomain`: the school used by tools without an explicit
           `subdomain` argument.
         - `failed_logins`: subdomain → error for login attempts that failed or
@@ -2254,11 +2299,17 @@ def get_schools() -> dict:
 
     Notes:
         - Use this instead of the former `auth_status` / `user_id` tools.
+        - To connect to a discovered subdomain that has no session yet, pass
+          it to `login_all`.
         - A school with `two_factor_pending: True` needs `two_factor_finish`.
     """
     def go():
+        # With EDUPAGE_SUBDOMAINS set it is a strict allowlist: sessions for
+        # unconfigured schools (stale, or added before the scope changed) are
+        # never surfaced or reported as usable.
+        scoped_subs = [sub for sub in _clients if _subdomain_is_configured(sub)]
         schools = []
-        for sub in _clients:
+        for sub in scoped_subs:
             client = _clients[sub]
             tf_pending = _two_factor.get(sub) is not None
             schools.append({
@@ -2269,14 +2320,28 @@ def get_schools() -> dict:
                 "two_factor_pending": tf_pending,
                 "active": sub == _active_subdomain,
             })
-        failed = dict(_autologin_failures) if _autologin_failures else {}
-        return {"schools": schools, "active_subdomain": _active_subdomain,
+        allowed = _configured_subdomains()
+        access_sub = (_active_subdomain or _first_subdomain_from_env()
+                      or (next(iter(_clients), None) if _clients else None))
+        accessible = None
+        if access_sub and _roles.get(access_sub) == "parent":
+            try:
+                found = _require_client(access_sub).get_subdomains()
+                accessible = [s for s in found if (not allowed) or s in allowed]
+            except Exception:  # noqa: BLE001
+                accessible = None
+        if accessible is None:
+            accessible = [s for s in _discovery_subdomains() if (not allowed) or s in allowed]
+        failed = {k: v for k, v in _autologin_failures.items()
+                  if _subdomain_is_configured(k)} if _autologin_failures else {}
+        return {"subdomains": accessible, "schools": schools,
+                "active_subdomain": _active_subdomain,
                 "failed_logins": failed,
                 "env_username_set": bool(EDUPAGE_USERNAME),
                 "env_password_set": bool(EDUPAGE_PASSWORD),
                 "env_subdomains_set": bool(EDUPAGE_SUBDOMAINS)}
 
-    return _run(go, "get_schools")
+    return _run(go, "get_subdomains")
 
 
 @_tool
