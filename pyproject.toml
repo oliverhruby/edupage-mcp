@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "edupage-mcp-full"
-version = "0.5.0"
+version = "0.5.1"
 description = "Full-feature EduPage MCP server: timetables, grades, homework, meals (ordering), messages, role-aware student switching, 2FA, multi-school with automatic student discovery, tiered name matching, and student cache."
 readme = "README.md"
 license = { text = "MIT" }
@@ -12,7 +12,7 @@ authors = [{ name = "Oliver Hrubý" }]
 requires-python = ">=3.10"
 keywords = ["mcp", "edupage", "education", "ai", "agent", "school", "timetable"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
