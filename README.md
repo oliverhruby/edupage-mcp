@@ -101,8 +101,9 @@ A single stdio MCP server exposing **29 tools** (published on PyPI as
 
 - **Authentication** — `login` (by credentials, portal auto-detect, or a
   `PHPSESSID` cookie via `method=`), `login_all` (multi-school, one call),
-  `two_factor_finish` (complete a pending 2FA), `get_schools` (logged-in
-  schools with role/user id per school + env config). The former `auth_status`,
+  `two_factor_finish` (complete a pending 2FA), `get_subdomains` (schools
+  available to the account with role/user id per school + env config, live
+  subdomain discovery for parents). The former `auth_status`,
   `user_id`, `login_auto`, `login_from_session`, and
   `two_factor_check_confirmed` tools are folded into these.
 - **Timetables** — `get_my_timetable`, `get_timetable` (teacher/student/class/
@@ -114,7 +115,7 @@ A single stdio MCP server exposing **29 tools** (published on PyPI as
   (auto-discover all students across schools), `get_my_students` (classmates or
   school-wide for parents), `switch_to_student` (by id **or** name, parent only),
   `switch_to_parent`, `clear_student_cache` (force refresh cached student lists)
-- **Schools** — `get_schools` (logged-in schools with role per school)
+- **Schools** — `get_subdomains` (subdomains available to the account — live-discovered for parents, limited by `EDUPAGE_SUBDOMAINS` when set — plus session state per school)
 - **Grades** — `get_grades`
 - **Timeline / notifications** — `get_timeline` (`category=` for homework,
   assignments, absences, events, news, or full history since a date)
@@ -352,7 +353,7 @@ After editing client config, **restart the client** so the MCP server is loaded.
 
 | User prompt | Likely tool call(s) | Expected response |
 |---|---|---|
-| "Are we connected and logged in?" | `get_schools` | Connected status, active school/subdomain, env config, and login state per school. |
+| "Are we connected and logged in?" | `get_subdomains` | Available school subdomains (live-discovered for parents), active school/subdomain, env config, and login state per school. |
 | "What classes do I have today?" | `get_my_timetable` | A short timetable summary for today. |
 | "Show me the 9.A schedule for 2026-09-10" | `get_timetable target_type="class" target_id="9.A" date_str="2026-09-10"` | Class timetable for that date. |
 | "What grades do I have this term?" | `get_grades term="FIRST" year=2026` | Subject-by-subject grade overview for the selected term/year. |
@@ -382,7 +383,7 @@ export EDUPAGE_SUBDOMAINS="school1,school2,school3" # macOS / Linux
 ```
 
 ```text
-get_schools        # lists school1, school2, school3 (logged in, with role)
+get_subdomains   # lists school1, school2, school3 (logged in, with role)
 scan_students      # discovers Student A and Student B across those schools
 get_student_timetable name="Student A"   # is found at school1 AND school2
 ```
@@ -396,7 +397,7 @@ login_all subdomains="school1,school2" usernames="u1,u2" passwords="p1,p2"
 
 get_my_timetable subdomain="school1"
 get_my_timetable subdomain="school2"
-get_schools          # shows all logged-in subdomains + which is active
+get_subdomains         # shows all logged-in subdomains + which is active
 ```
 
 You can also call `login` once per school to add/lookup sessions incrementally.
@@ -444,7 +445,7 @@ fully automatic.
 | `login` | Log in with username/password; `method="credentials"` (default), `method="auto"` (portal auto-detect, formerly `login_auto`), or `method="session"` with a `PHPSESSID` cookie (formerly `login_from_session`). Env vars supported. | ✅ session |
 | `login_all` | Log in to multiple schools in one call | ✅ session |
 | `two_factor_finish` | Finish a pending 2FA login (email/app `code` or `poll_seconds` device confirmation; formerly `two_factor_check_confirmed` + `two_factor_finish`) | ✅ session |
-| `get_schools` | Logged-in schools + role/user id per school, active subdomain, failed logins, env config (formerly `auth_status`, `user_id`) |  |
+| `get_subdomains` | Subdomains available to the account (live-discovered for parents; limited to `EDUPAGE_SUBDOMAINS` when set) + role/user id per school, active subdomain, failed logins, env config (formerly `auth_status`, `user_id`) |  |
 | `get_school_year` | Current school year |  |
 | `get_my_timetable` | Logged-in user's timetable for a date |  |
 | `get_timetable` | Timetable of a teacher/student/class/classroom; `end_date` for a daily range (formerly `get_timetable_range`) |  |
@@ -466,7 +467,7 @@ fully automatic.
 | `find_student` | Look up a student's person_id by name (cross-school) |  |
 | `scan_students` | Auto-discover students across the configured `EDUPAGE_SUBDOMAINS` (or all logged-in schools when unset) |  |
 | `clear_student_cache` | Clear cached student rosters (one school or all schools) | ✅ cache |
-| `get_schools` | List logged-in schools + role per school |  |
+| `get_subdomains` | Available school subdomains + role/session per school |  |
 | `send_message` | Send a message to a user | ✅ |
 | `switch_to_student` | Switch to a student account by id or name (parent only) | ✅ session |
 | `switch_to_parent` | Switch back to the parent account | ✅ session |
