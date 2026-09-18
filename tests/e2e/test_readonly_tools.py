@@ -68,7 +68,7 @@ TOOLS = {
     # documented graceful "no student" error. No real names are committed.
     "find_student": {"name": "ZZTestNoSuchStudentZZ", "subdomain": "@sub",
                      "known_error": "No student named"},
-    "get_schools": {},
+    "get_subdomains": {},
     "scan_students": {},
     # Parent accounts resolve a real EduStudent and query the child's timetable
     # directly (no switch_to_child session switching), so this must now succeed.

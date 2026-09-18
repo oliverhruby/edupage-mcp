@@ -48,7 +48,7 @@ jobs:
             get_day_summary, get_grades, get_meals, get_missing_teachers,
             get_my_students, get_my_timetable, get_next_ringing_time,
             get_next_week_timetable, get_periods, get_roster, get_school_year,
-            get_schools, get_student_timetable, get_timeline, get_timetable,
+            get_subdomains, get_student_timetable, get_timeline, get_timetable,
             get_timetable_changes, login, login_all, rate_meal, scan_students,
             send_message, sign_off_meal, switch_to_parent, switch_to_student,
             two_factor_finish
