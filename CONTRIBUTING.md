@@ -91,38 +91,130 @@ Version source of truth is `pyproject.toml`.
 
 Ensure tag version matches `pyproject.toml` version.
 
-## CI quality gates
+## CI/CD workflows
 
-All of the following checks must pass on `main` before a push is allowed.  
-They are defined in the corresponding GitHub Actions workflow files linked below.
+All automation lives in `.github/workflows/` (10 workflows). This reference
+lists every workflow — trigger, job, and purpose. `main` **branch protection**
+requires the jobs marked **required** to pass before a push is allowed.
 
-- **[python-sanity](.github/workflows/quality-gates.yml)** – runs `python -m py_compile src/edupage_mcp/__init__.py` and `pip install .` to verify the package compiles and can be imported. Ensures no syntax errors and that the library can be loaded.
+### Release pipelines (tag push `v*`)
 
-- **[docker-mcp-smoke](.github/workflows/docker-mcp-smoke.yml)** – builds the Docker image and performs an MCP stdio handshake (`initialize` + `tools/list`) against the container to confirm the server starts correctly.
+Pushing a version tag (`vX.Y.Z`, e.g. `git push origin v0.5.0`) runs the four
+release workflows in parallel. Version source of truth is `pyproject.toml`;
+tag-triggered workflows first run `scripts/check_tag_matches_version.py` and
+fail if the tag does not match the package version.
 
-- **[security / pip-audit](.github/workflows/security.yml)** – runs `pip-audit` against the full dependency tree (direct + transitive) on every push/PR to `main` and weekly. The workflow fails if any HIGH or CRITICAL CVE is detected.
+- **[Publish](.github/workflows/publish.yml)** – publishes
+  `edupage-mcp-full` to PyPI via OIDC trusted publishing (no API token; the
+  one-time publisher registration is documented in the file header).
+- **[Release](.github/workflows/release.yml)** – creates a GitHub Release with
+  auto-generated notes.
+- **[Publish Container](.github/workflows/publish-container.yml)** – builds
+  and pushes the GHCR image `ghcr.io/oliverhruby/edupage-mcp` for
+  `linux/amd64` + `linux/arm64`, tagged `vX.Y.Z` and `latest`.
+- **[Publish to MCP Registry](.github/workflows/publish-mcp-registry.yml)** –
+  validates `server.json` against the MCP Registry schema and publishes it via
+  `mcp-publisher` with GitHub OIDC (namespace `io.github.oliverhruby/*`);
+  runs after PyPI/Docker publish.
 
-- **[container-security / trivy-image](.github/workflows/container-security.yml)** – builds the Docker image and runs Trivy vulnerability scanning. The job fails on HIGH or CRITICAL findings, helping keep the image secure.
+### Branch-protection gates (push/PR to `main`)
 
-- **[upstream-coverage / coverage-drift](.github/workflows/upstream-coverage.yml)** – checks that every public `edupage-api` method is either wrapped by a call in `src/edupage_mcp/__init__.py` or explicitly listed in `scripts/edupage_api_ignored_methods.json` with a reason. It also runs a canary request against the latest `edupage-api` to catch drift.
+Each runs on every push to `main` and on pull requests (plus the noted
+schedule / manual dispatch):
 
-- **[publish-mcp-registry](.github/workflows/publish-mcp-registry.yml)** – validates `server.json` against the MCP Registry schema and publishes server metadata on tag push (runs after PyPI/Docker publish).
+- **[Quality Gates](.github/workflows/quality-gates.yml)** – `python-sanity`
+  compiles `src/edupage_mcp/__init__.py` and installs the package from source;
+  `docker-mcp-smoke` builds the Docker image, performs an MCP stdio handshake
+  (`initialize` + `tools/list`, expecting ≥ 28 tools), and smokes the
+  `streamable-http` transport both with and without `MCP_API_KEY` (auth probes
+  must be rejected).
+- **[Security](.github/workflows/security.yml)** – **required**; runs
+  `pip-audit` over the full installed dependency tree (direct + transitive,
+  OSV) and fails on any HIGH/CRITICAL CVE. Also weekly (Mon 06:00 UTC).
+- **[Container Security](.github/workflows/container-security.yml)** –
+  **required**; builds the image and scans it with Trivy. Fails on
+  HIGH/CRITICAL findings (`ignore-unfixed: true`, `.trivyignore`) and uploads a
+  SARIF report (all severities) to GitHub Security. Also weekly (Mon 07:00 UTC).
+- **[Upstream Coverage](.github/workflows/upstream-coverage.yml)** –
+  **required**; `coverage-drift` checks that every public `edupage-api` method
+  is either wrapped in `src/edupage_mcp/__init__.py` or listed in
+  `scripts/edupage_api_ignored_methods.json` with a reason.
+  `latest-upstream-canary` re-checks against the newest `edupage-api` release;
+  it runs only on the weekly schedule (Mon 08:00 UTC) and manual dispatch.
 
-## Upstream coverage drift check
+### Scheduled watchdogs
 
-To keep parity with `edupage-api`, CI runs
-`.github/workflows/upstream-coverage.yml`.
+- **[Glama Quality Watchdog](.github/workflows/glama-quality.yml)** – every
+  Monday 06:00 UTC (and on `workflow_dispatch`), reads the live Glama TDQS
+  grades for `oliverhruby/edupage-mcp` via `scripts/check_glama_quality.py`:
+  per-tool grade letters are parsed from the public server page; the overall
+  `qualityScore` is read from the Glama API when the `GLAMA_API_KEY` secret is
+  set. Any tool below grade `A`, a tool inventory that no longer matches
+  `GLAMA_EXPECTED_TOOLS`, or an overall score below `4.0` keeps a
+  `glama-quality` issue open (created/updated automatically, closed when green
+  again). **Keep `GLAMA_EXPECTED_TOOLS` in sync with the tool surface in
+  `src/edupage_mcp/__init__.py`** after adding/removing tools.
 
-It verifies each public `Edupage` method is either:
+### On-demand (manual only)
 
-- covered by wrapper usage in `src/edupage_mcp/__init__.py`, or
-- explicitly listed in `scripts/edupage_api_ignored_methods.json` with a reason.
+- **[e2e-live](.github/workflows/e2e-ci.yml)** – the live integration suite
+  (`pytest -m e2e tests/e2e`) against the real EduPage schools. Manual
+  `workflow_dispatch` only; never on push/PR. Currently **dormant**:
+  GitHub-hosted runners cannot reach `edupage.org` (network unreachable,
+  confirmed 2026-09-10), so it needs a self-hosted runner with home-ISP
+  egress — until then run the suite locally (see below).
 
-Run locally:
+### Live e2e suite (local)
+
+The live integration suite (`tests/e2e/`) logs into the real schools with the
+helper's EduPage account and exercises every read-only tool. It runs only on
+the owner's machine (the CI copy is dormant, above):
 
 ```bash
-python scripts/check_edupage_api_coverage.py
+powershell -ExecutionPolicy Bypass -File run_e2e.ps1
 ```
+
+- `run_e2e.ps1` sets `EDUPAGE_E2E=1` and strips `cvcmalacky` from
+  `EDUPAGE_SUBDOMAINS` — only `zssturovamalacky` and `iprskola` are approved.
+  Requires the `EDUPAGE_USERNAME` / `EDUPAGE_PASSWORD` of the helper account.
+- Read-only by design: `conftest.py` monkeypatches `edupage-api` write methods
+  to raise, and `test_manifest.py` guarantees no write-capable tool is invoked.
+- Known upstream defects are tracked as `known_error` substrings and **fail
+  the suite if the message changes** (e.g. `find_student` no-such-student,
+  `get_grades` `percent` UnboundLocalError in edupage-api 0.12.5). Fix in the
+  wrapper or bump upstream when they drift.
+- A drift report is written to `reports/e2e-report.json` (gitignored) with
+  full payload previews — the local report stays on the machine.
+
+**Regenerating child-identity fingerprints** (owner only, never on CI): the
+check reads the gitignored `tests/e2e/.local.e2e.json`. When EduPage changes
+or children change legitimately: (1) run the suite locally with
+`.local.e2e.json` present to see the full identity diff, (2) regenerate
+`tests/e2e/expected_children.fingerprint.json` with the live generator and
+commit it — the commit message must not contain child identities.
+
+### Privacy policy (summary)
+
+This repo and its CI are **public**. Exact child identities (names + person
+ids) must never be committed, printed in CI logs, or uploaded as artifacts.
+Local exact-identity checks read the gitignored `tests/e2e/.local.e2e.json`;
+the only CI-committed evidence is the one-way fingerprint file and a zero-data
+report (`EDUPAGE_E2E_CI=1` keeps the suite dot-only and identity-free).
+
+### Manual workflow runs
+
+Trigger any workflow on demand:
+
+```bash
+gh workflow run security.yml --repo oliverhruby/edupage-mcp
+gh workflow run quality-gates.yml --repo oliverhruby/edupage-mcp
+gh workflow run container-security.yml --repo oliverhruby/edupage-mcp
+gh workflow run upstream-coverage.yml --repo oliverhruby/edupage-mcp
+gh workflow run glama-quality.yml --repo oliverhruby/edupage-mcp
+gh workflow run e2e-ci.yml --repo oliverhruby/edupage-mcp   # live e2e (needs secrets)
+```
+
+## Upstream coverage drift check
 
 To keep parity with `edupage-api`, CI runs
 `.github/workflows/upstream-coverage.yml`.
