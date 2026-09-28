@@ -60,7 +60,7 @@ comparison is more useful than a marketing page.
 |                          | **this project**                                                            | [mrtineu/edupage-mcp](https://github.com/mrtineu/edupage-mcp) | [mhlavac/edupage-mcp](https://github.com/mhlavac/edupage-mcp) |
 | ------------------------ | -------------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------- |
 | Install                  | `uvx edupage-mcp-full`, `pip`, or one-click from the [MCP Registry](https://registry.modelcontextprotocol.io/) | `uvx edupage-mcp` (PyPI)                                     | clone + `uv sync`                                         |
-| Tools                    | 30 (consolidated — see note)                                                | 13                                                          | 26                                                         |
+| Tools                    | 29 (consolidated — see note)                                                | 13                                                          | 26                                                         |
 | License                  | **MIT**                                                                     | Apache-2.0                                                  | GPL-3.0                                                    |
 | Stars                    | 1                                                                           | 2                                                            | 1                                                          |
 | Repo created             | 2026-09-03                                                                  | 2026-06-05                                                   | 2026-02-21                                                 |
@@ -72,8 +72,8 @@ newest and least-adopted of the three** — as of 2026-09-28 it is 25 days old w
 a single star, while `mhlavac/edupage-mcp` predates it by over six months. And
 **tool count is a poor metric**: this project deliberately folds families behind
 a discriminating parameter (`get_roster(roster_type=…)`,
-`get_timeline(category=…)`) rather than shipping near-identical tools, so 30
-tools here cover ground that takes the others 26 or 13 separate ones. The table
+`get_timeline(category=…)`) rather than shipping near-identical tools, so its 29
+tools cover ground that takes the others 26 or 13 separate ones. The table
 below is therefore written by *capability*, not by tool name.
 
 ### Capabilities
