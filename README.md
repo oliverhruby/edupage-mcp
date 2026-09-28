@@ -51,46 +51,51 @@ ordering), messages, rosters, parent child-switching and more — including
 
 ## Why another EduPage MCP server?
 
-Two other EduPage MCP servers exist: [`mrtineu/edupage-mcp`](https://github.com/mrtineu/edupage-mcp)
-(also on PyPI) and [`mhlavac/edupage-mcp`](https://github.com/mhlavac/edupage-mcp). All three
-wrap the same [`edupage-api`](https://github.com/EdupageAPI/edupage-api) library. Both are
-good and I have **no affiliation** with them — they are here for an honest comparison.
+Two other EduPage MCP servers already exist:
 
-MIT, 31 tools, `uvx`/pip/[MCP Registry](https://registry.modelcontextprotocol.io/) one-click install, `pytest` suite in CI —
-vs **mrtineu** (Apache-2.0, 13 tools, PyPI) and **mhlavac** (GPL-3.0, 26 tools, clone + `uv sync`).
+- [`mrtineu/edupage-mcp`](https://github.com/mrtineu/edupage-mcp) — also
+  published on PyPI as [`edupage-mcp`](https://pypi.org/project/edupage-mcp/)
+- [`mhlavac/edupage-mcp`](https://github.com/mhlavac/edupage-mcp)
 
-MIT, 31 tools, `uvx`/pip/[MCP Registry](https://registry.modelcontextprotocol.io/) one-click install, `pytest` suite in CI —
-vs **mrtineu** (Apache-2.0, 13 tools, PyPI) and **mhlavac** (GPL-3.0, 26 tools, clone + `uv sync`).
+Both are good and I have **no affiliation** with them — they are simply
+referenced here for honest comparison. They primarily focus on the **read-only**
+surface of the API.
 
-| Differentiator | mhlavac | mrtineu | **this project** |
+This project deliberately goes further:
+
+| Capability | mhlavac | mrtineu (PyPI) | **this project** |
 |---|---|---|---|
-| **Writes** — meals, messages, child switching | meals only | ❌ | ✅ |
-| **2FA** completion, `PHPSESSID` | ❌ | ❌ | ✅ |
-| **Multiple schools**, one deployment | ✅ | ❌ | ✅ |
-| Homework body + attachments, file download | ❌ | ✅ | ✅ |
-| Live next bell, raw custom request | ❌ | ❌ | ✅ |
-| Auto re-login on expired session | ❌ | ✅ | ✅ |
+| **Advanced login** — portal auto-detect, **2FA**, **session id** (`PHPSESSID`) | partial (portal) | basic only | ✅ |
+| Timetables (own + any teacher/class/room) | ✅ | ✅ | ✅ |
+| Grades (all / by term & year) | ✅ | ✅ | ✅ |
+| Substitutions / timetable changes | ✅ | ✅ | ✅ |
+| Meals — **read menu** | ✅ | ✅ | ✅ |
+| Meals — **choose / sign-off / rate** | ❌ | ❌ | ✅ |
+| Send messages (`send_message`) | ✅ | ❌ | ✅ |
+| Parent **student switching** (switch to/from student) | partial (list) | ❌ | ✅ |
+| Next ringing time / bell schedule | ❌ | ❌ | ✅ |
+| Raw session **custom request** | ❌ | ❌ | ✅ |
+| **Multiple schools** (auto-login + discovery) | ❌ | ❌ | ✅ |
+| **Role-aware** (parent / student / teacher) | ❌ | ❌ | ✅ |
+| **Day summaries** (one-call daily report) | ❌ | ❌ | ✅ |
+| Homework — **body text + attachments** | ❌ | ✅ | ✅ |
+| **Download a homework file to disk** | ❌ | ✅ | ✅ |
 
-**Where they're better:** `mhlavac` has a broader read surface, and `mrtineu` is a leaner codebase
-to read. Pick this one for **writes**, **2FA** or a **raw passthrough**.
+**Key differentiators:**
 
-Newest and least-adopted of the three (2026-09-28: 25 days old, one star). Tool count is a poor
-metric — families are folded behind a parameter (`get_roster(roster_type=…)`) rather than shipped
-as near-identical tools.
+- **Multi-school automatic discovery.** Set `EDUPAGE_SUBDOMAINS` with one shared
+  login and the server auto-discovers students across all schools — no need to
+  maintain a manual "Student → school1, Student → school2" mapping. A student at
+  two schools (e.g. Student at `school1` + `school2`) is found automatically
+  with separate per-school results.
+- **Role-aware tools.** The server detects whether you're a parent, student, or
+  teacher at each school and behaves accordingly — `get_student_timetable`
+  switches to the student account for parents, returns direct timetables for
+  students. No tool duplication.
+- **Full write surface.** Meal ordering/rating, message sending, student switching
+  — the other servers don't cover these.
 
-*Facts checked 2026-09-28. If a row is wrong, please open an issue.*
-
-**What it does that the others don't:**
-
-- **Multi-school discovery.** Set `EDUPAGE_SUBDOMAINS` and the server logs into every
-  school and finds each child automatically — no hand-maintained "child → school" mapping.
-  A child attending two schools comes back with separate per-school results.
-- **Role-aware, without duplicated tools.** The server detects parent / student / teacher
-  per school and adapts — a parent's `get_student_timetable` resolves the child itself,
-  a student's returns their own timetable. One tool, correct behaviour either way.
-- **Writes and session recovery.** Meal ordering, sign-off and rating, message sending,
-  child switching, plus automatic re-login when a session expires mid-use.
-
+*Comparison checked 2026-09-28. If a row is wrong, please open an issue.*
 
 ---
 
