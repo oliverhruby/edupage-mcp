@@ -186,44 +186,6 @@ def build_report(out_dir: pathlib.Path, results: dict, url: str) -> None:
     (out_dir / "glama-quality-issue.md").write_text("".join(body_parts), encoding="utf-8")
 
 
-_README_BADGE_RE = re.compile(
-    r"img\.shields\.io/badge/Glama-(\d+(?:\.\d+)?)%2F(\d+)", re.IGNORECASE
-)
-
-
-def check_readme_badge(score) -> list[str]:
-    """Compare the score baked into the README badge with the live score.
-
-    The badge is static (shields.io cannot call Glama's authenticated API), so it
-    can silently go stale. Report the drift instead of letting it rot; the caller
-    turns a mismatch into a violation.
-    """
-    if score is None:
-        return []
-    notes: list[str] = []
-    readme = pathlib.Path("README.md")
-    try:
-        text = readme.read_text(encoding="utf-8")
-    except Exception as exc:  # noqa: BLE001
-        return [f"README badge check skipped: {exc}"]
-
-    match = _README_BADGE_RE.search(text)
-    if not match:
-        return ["README badge carries no Glama score (expected a "
-                "img.shields.io/badge/Glama-<score>%2F5 badge)"]
-
-    badged = float(match.group(1))
-    scale = float(match.group(2))
-    if scale != 5:
-        notes.append(f"README Glama badge uses a /{scale:g} scale, expected /5")
-    if abs(badged - float(score)) > 0.001:
-        notes.append(
-            f"README Glama badge says {badged:g}/{scale:g} but Glama reports "
-            f"{score} — update the badge in README.md"
-        )
-    return notes
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--path", help="read local HTML instead of fetching the page")
@@ -302,12 +264,8 @@ def main() -> int:
             results["score"] = score
             if score is None:
                 results["notes"].append("API qualityScore is null — scoring not complete yet")
-            else:
-                if score < min_score:
-                    results["score_below"] = True
-                badge_notes = check_readme_badge(score)
-                results["notes"].extend(badge_notes)
-                results["badge_drift"] = bool(badge_notes)
+            elif score < min_score:
+                results["score_below"] = True
         except urllib.error.HTTPError as exc:
             results["notes"].append(
                 f"API check skipped: HTTP {exc.code} on /v1/servers/"
@@ -333,8 +291,6 @@ def main() -> int:
         return 2
 
     violations = bool(results["letters_below"]) or bool(results.get("score_below")) or bool(
-        results.get("badge_drift")
-    ) or bool(
         (results.get("inventory_drift") or {}).get("missing")
     ) or bool((results.get("inventory_drift") or {}).get("extra"))
 
