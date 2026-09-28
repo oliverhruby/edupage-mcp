@@ -59,6 +59,9 @@ good and I have **no affiliation** with them — they are here for an honest com
 MIT, 31 tools, `uvx`/pip/[MCP Registry](https://registry.modelcontextprotocol.io/) one-click install, `pytest` suite in CI —
 vs **mrtineu** (Apache-2.0, 13 tools, PyPI) and **mhlavac** (GPL-3.0, 26 tools, clone + `uv sync`).
 
+MIT, 31 tools, `uvx`/pip/[MCP Registry](https://registry.modelcontextprotocol.io/) one-click install, `pytest` suite in CI —
+vs **mrtineu** (Apache-2.0, 13 tools, PyPI) and **mhlavac** (GPL-3.0, 26 tools, clone + `uv sync`).
+
 | Differentiator | mhlavac | mrtineu | **this project** |
 |---|---|---|---|
 | **Writes** — meals, messages, child switching | meals only | ❌ | ✅ |
@@ -76,6 +79,17 @@ metric — families are folded behind a parameter (`get_roster(roster_type=…)`
 as near-identical tools.
 
 *Facts checked 2026-09-28. If a row is wrong, please open an issue.*
+
+**What it does that the others don't:**
+
+- **Multi-school discovery.** Set `EDUPAGE_SUBDOMAINS` and the server logs into every
+  school and finds each child automatically — no hand-maintained "child → school" mapping.
+  A child attending two schools comes back with separate per-school results.
+- **Role-aware, without duplicated tools.** The server detects parent / student / teacher
+  per school and adapts — a parent's `get_student_timetable` resolves the child itself,
+  a student's returns their own timetable. One tool, correct behaviour either way.
+- **Writes and session recovery.** Meal ordering, sign-off and rating, message sending,
+  child switching, plus automatic re-login when a session expires mid-use.
 
 
 ---
