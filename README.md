@@ -51,71 +51,45 @@ ordering), messages, rosters, parent child-switching and more — including
 
 ## Why another EduPage MCP server?
 
-Three EduPage MCP servers exist. All three wrap the same community-maintained
-[`edupage-api`](https://github.com/EdupageAPI/edupage-api) library — none of them
-reimplements EduPage's undocumented endpoints from scratch. I have **no
-affiliation** with the other two; they are listed here because an honest
-comparison is more useful than a marketing page.
+Two other EduPage MCP servers exist: [`mrtineu/edupage-mcp`](https://github.com/mrtineu/edupage-mcp)
+(also on PyPI) and [`mhlavac/edupage-mcp`](https://github.com/mhlavac/edupage-mcp). All three
+wrap the same [`edupage-api`](https://github.com/EdupageAPI/edupage-api) library. Both are
+good and I have **no affiliation** with them — they are here for an honest comparison.
 
-|                          | **this project**                                                            | [mrtineu/edupage-mcp](https://github.com/mrtineu/edupage-mcp) | [mhlavac/edupage-mcp](https://github.com/mhlavac/edupage-mcp) |
-| ------------------------ | -------------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------- |
-| Install                  | `uvx edupage-mcp-full`, `pip`, or one-click from the [MCP Registry](https://registry.modelcontextprotocol.io/) | `uvx edupage-mcp` (PyPI)                                     | clone + `uv sync`                                         |
-| Tools                    | 31 (consolidated — see note)                                                | 13                                                          | 26                                                         |
-| License                  | **MIT**                                                                     | Apache-2.0                                                  | GPL-3.0                                                    |
-| Stars                    | 1                                                                           | 2                                                            | 1                                                          |
-| Repo created             | 2026-09-03                                                                  | 2026-06-05                                                   | 2026-02-21                                                 |
-| Last push                | 2026-09-28                                                                  | 2026-09-16                                                   | 2026-09-22                                                 |
-| Test suite               | ✅ (`pytest`, run in CI)                                                    | ❌                                                            | ✅                                                          |
+| Capability | mhlavac | mrtineu | **this project** |
+|---|---|---|---|
+| Install | clone + `uv sync` | `uvx edupage-mcp` | `uvx edupage-mcp-full`, `pip`, or [MCP Registry](https://registry.modelcontextprotocol.io/) one-click |
+| Tools | 26 | 13 | 31 *(consolidated — see below)* |
+| License | GPL-3.0 | Apache-2.0 | **MIT** |
+| **Advanced login** — 2FA, `PHPSESSID` | ❌ | ❌ | ✅ |
+| **Multiple schools** in one deployment | ✅ | ❌ | ✅ |
+| Parent — list children / switch into a child | ✅ / ❌ | ❌ | ✅ / ✅ |
+| Timetables — own, student, teacher, class, room | ✅ | ✅ | ✅ |
+| **Homework** — body text + attachments, file download | ❌ | ✅ | ✅ |
+| Meals — **choose / sign-off / rate** | ❌ | ❌ | ✅ |
+| Send messages | ✅ | ❌ | ✅ |
+| Live next bell (`get_next_ringing_time`) | ❌ | ❌ | ✅ |
+| Raw custom HTTP request | ❌ | ❌ | ✅ |
+| Auto re-login on an expired session | ❌ | ✅ | ✅ |
+| One-call day report | ✅ *(last N days)* | ❌ | ✅ *(one day)* |
+| **"Is the kid at school today?"** | ✅ | ❌ | ❌ |
+| Test suite | ✅ | ❌ | ✅ |
 
-Two things worth stating plainly. **This is the newest and least-adopted of the
-three** — as of 2026-09-28 it is 25 days old with a single star, while
-`mhlavac/edupage-mcp` predates it by over six months. And **tool count is a poor
-metric**: this project folds families behind a discriminating parameter
-(`get_roster(roster_type=…)`, `get_timeline(category=…)`) rather than shipping
-near-identical tools, so its 31 tools cover ground that takes the others 26 or 13
-separate ones. The table below is written by *capability*, not by tool name.
+**Where the other two are genuinely better:** `mhlavac` has
+[`get_school_days`](https://github.com/mhlavac/edupage-mcp) — "is my kid at school today / over
+lunch?" from trips, excursions and absences (**this project has no equivalent**) — and merges its
+list-returning tools across schools behind a `school=` filter. `mrtineu` is a leaner,
+async-native codebase to read. **This project** is the one to pick if you need **writes** (meal
+ordering, messages, child switching), **2FA** completion or a **raw passthrough**.
 
-### Capabilities
+Two caveats: this is the **newest and least-adopted** of the three (as of 2026-09-28, 25 days old,
+one star — `mhlavac` predates it by over six months), and **tool count is a poor metric** — this
+project folds families behind a discriminating parameter (`get_roster(roster_type=…)`,
+`get_timeline(category=…)`) rather than shipping near-identical tools, so 31 tools cover ground
+that takes the others 26 or 13 separate ones.
 
-| Capability                                          | mhlavac            | mrtineu   | **this project** |
-| --------------------------------------------------- | ------------------ | --------- | ---------------- |
-| Consolidated families (`get_roster=`, `get_timeline=`) | ❌              | ❌        | ✅               |
-| **Multiple schools** in one deployment              | ✅                 | ❌        | ✅               |
-| Auto re-login on an expired session                 | ❌                 | ✅        | ✅               |
-| Parent — list children / switch into a child        | ✅ / ❌             | ❌ / ❌    | ✅ / ✅           |
-| Login — 2FA completion, existing `PHPSESSID`        | ❌                 | ❌        | ✅               |
-| Timetable — by teacher/classroom, over a date range | ❌                 | ❌        | ✅               |
-| Live next bell (`get_next_ringing_time`)            | ❌                 | ❌        | ✅               |
-| Meals — **choose / sign off / rate**                | ❌                 | ❌        | ✅               |
-| Homework — **body text + attachments**              | ❌                 | ✅        | ✅               |
-| **Download a homework file to disk**                | ❌                 | ✅        | ✅               |
-| One-call day report (`get_day_summary`)             | ✅ *(last N days)* | ❌        | ✅ *(one day)*   |
-| **"Is the kid at school today?"**                   | ✅                 | ❌        | ❌               |
-| Raw custom HTTP request                             | ❌                 | ❌        | ✅               |
-
-### Where the other two are genuinely better
-
-The table above is not one-sided, and it would be dishonest to leave it there:
-
-- **[`mhlavac/edupage-mcp`](https://github.com/mhlavac/edupage-mcp)** —
-  `get_school_days` answers "is my kid at school today / over lunch?" from trips,
-  excursions and absences (**this project has no equivalent tool**); its
-  list-returning tools merge across schools behind a `school=` filter, where here
-  `subdomain` picks one school and a few tools return one result per school; and
-  it ships a `.mcp.json` for zero-config Claude Code pickup. Want the **broadest
-  read surface**? This is the one.
-- **[`mrtineu/edupage-mcp`](https://github.com/mrtineu/edupage-mcp)** — a leaner,
-  async-native codebase to read (two small modules, 13 tools) against this
-  project's one module, 31 tools and session/roster cache, and it fails loudly
-  on 2FA instead of completing the flow. Its former homework edge is now
-  **parity**: both read the assignment body and save attachments.
-
-- **This project** is the one to pick if you need **writes** (meal ordering,
-  messages, child switching), **2FA** completion or a **raw passthrough**.
-
-*Comparison checked against each project's source, GitHub metadata and PyPI on
-2026-09-28. These projects move fast — if a row is wrong, please open an issue
-rather than assuming it is deliberate.*
+*Facts checked against each project's source, GitHub metadata and PyPI on 2026-09-28. These
+projects move fast — if a row is wrong, please open an issue rather than assuming it's deliberate.*
 
 
 ---
