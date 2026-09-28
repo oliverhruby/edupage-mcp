@@ -3,7 +3,7 @@
 <!-- mcp-name: io.github.oliverhruby/edupage-mcp -->
 
 [![GitHub release](https://img.shields.io/github/v/tag/oliverhruby/edupage-mcp.svg?sort=semver&label=release)](https://github.com/oliverhruby/edupage-mcp/releases)
-[![Glama](https://img.shields.io/badge/Glama-listed-informational)](https://glama.ai/mcp/servers/oliverhruby/edupage-mcp)
+[![Glama](https://img.shields.io/badge/Glama-4.1%2F5-success)](https://glama.ai/mcp/servers/oliverhruby/edupage-mcp)
 [![Quality gates](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/quality-gates.yml.svg?label=quality%20gates)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/quality-gates.yml)
 [![Security](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/security.yml.svg?label=security)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/security.yml)
 [![Container security](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/container-security.yml.svg?label=container%20security)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/container-security.yml)
@@ -60,117 +60,58 @@ comparison is more useful than a marketing page.
 |                          | **this project**                                                            | [mrtineu/edupage-mcp](https://github.com/mrtineu/edupage-mcp) | [mhlavac/edupage-mcp](https://github.com/mhlavac/edupage-mcp) |
 | ------------------------ | -------------------------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------- |
 | Install                  | `uvx edupage-mcp-full`, `pip`, or one-click from the [MCP Registry](https://registry.modelcontextprotocol.io/) | `uvx edupage-mcp` (PyPI)                                     | clone + `uv sync`                                         |
-| Tools                    | 29 (consolidated — see note)                                                | 13                                                          | 26                                                         |
+| Tools                    | 31 (consolidated — see note)                                                | 13                                                          | 26                                                         |
 | License                  | **MIT**                                                                     | Apache-2.0                                                  | GPL-3.0                                                    |
 | Stars                    | 1                                                                           | 2                                                            | 1                                                          |
 | Repo created             | 2026-09-03                                                                  | 2026-06-05                                                   | 2026-02-21                                                 |
 | Last push                | 2026-09-28                                                                  | 2026-09-16                                                   | 2026-09-22                                                 |
 | Test suite               | ✅ (`pytest`, run in CI)                                                    | ❌                                                            | ✅                                                          |
 
-Two things worth stating plainly before the feature table. **This is the
-newest and least-adopted of the three** — as of 2026-09-28 it is 25 days old with
-a single star, while `mhlavac/edupage-mcp` predates it by over six months. And
-**tool count is a poor metric**: this project deliberately folds families behind
-a discriminating parameter (`get_roster(roster_type=…)`,
-`get_timeline(category=…)`) rather than shipping near-identical tools, so its 29
-tools cover ground that takes the others 26 or 13 separate ones. The table
-below is therefore written by *capability*, not by tool name.
+Two things worth stating plainly. **This is the newest and least-adopted of the
+three** — as of 2026-09-28 it is 25 days old with a single star, while
+`mhlavac/edupage-mcp` predates it by over six months. And **tool count is a poor
+metric**: this project folds families behind a discriminating parameter
+(`get_roster(roster_type=…)`, `get_timeline(category=…)`) rather than shipping
+near-identical tools, so its 31 tools cover ground that takes the others 26 or 13
+separate ones. The table below is written by *capability*, not by tool name.
 
 ### Capabilities
 
-| Capability                              | mhlavac       | mrtineu            | **this project** |
-| --------------------------------------- | ------------- | ------------------ | ---------------- |
-| Login — credentials                     | ✅            | ✅                 | ✅               |
-| Login — portal auto-detect              | ✅            | ❌                 | ✅               |
-| Login — **2FA completion**              | ❌            | ❌                 | ✅               |
-| Login — existing `PHPSESSID`            | ❌            | ❌                 | ✅               |
-| **Multiple schools** in one deployment  | ✅            | ❌                 | ✅               |
-| Timetable — own                         | ✅            | ✅                 | ✅               |
-| Timetable — by student                  | ✅ (by name)  | ❌                 | ✅ (name or id)  |
-| Timetable — by class                    | ✅            | ❌                 | ✅               |
-| Timetable — by **teacher**              | ❌            | ❌                 | ✅               |
-| Timetable — by **classroom**            | ❌            | ❌                 | ✅               |
-| Timetable — over a **date range**       | ❌            | ❌                 | ✅               |
-| Next-week timetable                     | ✅            | ❌                 | ✅               |
-| Grades                                  | ✅            | ✅                 | ✅               |
-| Substitutions / timetable changes       | ✅            | ✅                 | ✅               |
-| Missing teachers                        | ❌            | ✅ *(experimental)* | ✅               |
-| Meals — read menu                       | ✅            | ✅                 | ✅               |
-| Meals — **choose / sign off / rate**    | ❌            | ❌                 | ✅               |
-| Send messages                           | ✅ *(open bug [#5](https://github.com/mhlavac/edupage-mcp/issues/5))* | ❌ | ✅               |
-| Parent — list own children              | ✅            | ❌                 | ✅               |
-| Parent — **switch session into a child**| ❌            | ❌                 | ✅               |
-| Bell schedule (periods)                 | ✅            | ❌                 | ✅               |
-| **Next ringing time** (live)            | ❌            | ❌                 | ✅               |
-| Homework — from notifications           | ✅            | ✅                 | ✅               |
-| Homework — **body text + attachments**  | ❌            | ✅                 | ❌               |
-| **Download a homework file to disk**    | ❌            | ✅                 | ❌               |
-| Absences                                | ✅            | ❌                 | ✅               |
-| Upcoming events                         | ✅            | ❌                 | ✅               |
-| School news                             | ✅            | ❌                 | ✅               |
-| Assignments (tests / exams)             | ✅            | ❌                 | ✅               |
-| Roster — students/teachers/classes/classrooms/subjects | ✅ | partial          | ✅               |
-| Whole-school roster                     | ✅            | ❌                 | ✅               |
-| **"Is the kid at school today?"**       | ✅            | ❌                 | ❌               |
-| Aggregate summary                       | ✅ *(last N days)* | ❌             | ✅ *(one day)*   |
-| Raw custom HTTP request                 | ❌            | ❌                 | ✅               |
-| **Role detection** (parent/student/teacher) | ❌         | ❌                 | ✅               |
-| Auto re-login on expired session        | ❌            | ✅                 | ✅ *(several tools)* |
-| Automated tests in CI                   | lint only     | ❌                 | ✅               |
+| Capability                                          | mhlavac            | mrtineu   | **this project** |
+| --------------------------------------------------- | ------------------ | --------- | ---------------- |
+| Consolidated families (`get_roster=`, `get_timeline=`) | ❌              | ❌        | ✅               |
+| **Multiple schools** in one deployment              | ✅                 | ❌        | ✅               |
+| Auto re-login on an expired session                 | ❌                 | ✅        | ✅               |
+| Parent — list children / switch into a child        | ✅ / ❌             | ❌ / ❌    | ✅ / ✅           |
+| Login — 2FA completion, existing `PHPSESSID`        | ❌                 | ❌        | ✅               |
+| Timetable — by teacher/classroom, over a date range | ❌                 | ❌        | ✅               |
+| Live next bell (`get_next_ringing_time`)            | ❌                 | ❌        | ✅               |
+| Meals — **choose / sign off / rate**                | ❌                 | ❌        | ✅               |
+| Homework — **body text + attachments**              | ❌                 | ✅        | ✅               |
+| **Download a homework file to disk**                | ❌                 | ✅        | ✅               |
+| One-call day report (`get_day_summary`)             | ✅ *(last N days)* | ❌        | ✅ *(one day)*   |
+| **"Is the kid at school today?"**                   | ✅                 | ❌        | ❌               |
+| Raw custom HTTP request                             | ❌                 | ❌        | ✅               |
 
 ### Where the other two are genuinely better
 
 The table above is not one-sided, and it would be dishonest to leave it there:
 
-**[`mhlavac/edupage-mcp`](https://github.com/mhlavac/edupage-mcp)**
+- **[`mhlavac/edupage-mcp`](https://github.com/mhlavac/edupage-mcp)** —
+  `get_school_days` answers "is my kid at school today / over lunch?" from trips,
+  excursions and absences (**this project has no equivalent tool**); its
+  list-returning tools merge across schools behind a `school=` filter, where here
+  `subdomain` picks one school and a few tools return one result per school; and
+  it ships a `.mcp.json` for zero-config Claude Code pickup. Want the **broadest
+  read surface**? This is the one.
+- **[`mrtineu/edupage-mcp`](https://github.com/mrtineu/edupage-mcp)** — a leaner,
+  async-native codebase to read (two small modules, 13 tools) against this
+  project's one module, 31 tools and session/roster cache, and it fails loudly
+  on 2FA instead of completing the flow. Its former homework edge is now
+  **parity**: both read the assignment body and save attachments.
 
-- **`get_school_days`** — answers "is my kid at school today / over lunch?" from
-  trips, excursions and absences. **This project has no equivalent tool.**
-- **Cross-school merged queries.** Its list-returning tools merge across schools,
-  tag every row with a `school` field, and accept a `school=` filter. Here,
-  `subdomain` selects a single school, and a few tools (for example
-  `get_student_timetable`) return one result per school instead of merging.
-- **Broader read surface on paper** — 26 distinct tools where this project folds
-  the same ground into parameterised families. If you like one-tool-per-endpoint,
-  that is a legitimate preference, not a flaw.
-- Ships a `.mcp.json` for zero-config Claude Code pickup.
-
-**[`mrtineu/edupage-mcp`](https://github.com/mrtineu/edupage-mcp)**
-
-- **By far the deepest homework support of the three.** It parses the internal
-  material-player page, so you get the assignment *body* plus a list of
-  attachments, and `download_homework_file` saves the file to disk. This
-  project's `get_timeline(category='homework')` — like mhlavac's — only sees what
-  the timeline notification itself exposes. This is a real gap here.
-- **Fails loudly on 2FA.** It detects a pending 2FA and raises a clear error
-  telling you 2FA is unsupported. mhlavac discards the library's return value and
-  would report success with a non-authenticated session. This project goes
-  further and actually completes the flow.
-- **Async-native** tool bodies, and one-command `uvx` install without a clone
-  (this project matches the install story, and is additionally in the MCP
-  Registry).
-
-### What only this project does
-
-- **2FA completion**, and login from an existing `PHPSESSID` session.
-- **Parent session-switching** into a child account — and back to the parent.
-- **The full canteen write surface**: `choose_meal`, `sign_off_meal`, `rate_meal`.
-- **Timetables addressed by teacher or classroom**, and over a **date range**.
-- **`get_next_ringing_time`** — the next bell, live.
-- **`custom_request`** — a raw passthrough for any endpoint no tool covers yet.
-- **Role detection**, so a parent, a student and a teacher each get the right
-  behaviour from the same tool.
-- **`get_day_summary`** — one call for a whole day: timetable, substitutions,
-  meals, homework, absences, news and events.
-
-### Which one should you pick?
-
-- You want the **broadest read surface** and do not need any write operation →
-  [`mhlavac/edupage-mcp`](https://github.com/mhlavac/edupage-mcp).
-- You care about **homework content and files**, or want the simplest possible
-  install → [`mrtineu/edupage-mcp`](https://github.com/mrtineu/edupage-mcp).
-- You need **writes** (meal ordering, messages, child switching), **2FA**, or a
-  **raw passthrough** → this project.
+- **This project** is the one to pick if you need **writes** (meal ordering,
+  messages, child switching), **2FA** completion or a **raw passthrough**.
 
 *Comparison checked against each project's source, GitHub metadata and PyPI on
 2026-09-28. These projects move fast — if a row is wrong, please open an issue
@@ -181,7 +122,7 @@ rather than assuming it is deliberate.*
 
 ## What it provides
 
-A single stdio MCP server exposing **29 tools** (published on PyPI as
+A single stdio MCP server exposing **31 tools** (published on PyPI as
 [`edupage-mcp-full`](https://pypi.org/project/edupage-mcp-full/)):
 
 - **Authentication** — `login` (by credentials, portal auto-detect, or a
@@ -204,6 +145,11 @@ A single stdio MCP server exposing **29 tools** (published on PyPI as
 - **Grades** — `get_grades`
 - **Timeline / notifications** — `get_timeline` (`category=` for homework,
   assignments, absences, events, news, or full history since a date)
+- **Homework** — `get_timeline(category='homework')` to list assignments
+  (ids in `additional_data.superid`), `get_homework_material` to read one
+  assignment's **body text**, dates and attachment list (the notification alone
+  only carries the title and due date), `download_homework_file` to save one
+  attachment to disk
 - **Substitutions** — `get_timetable_changes`, `get_missing_teachers`
 - **Meals** — `get_meals`, `choose_meal`, `sign_off_meal`, `rate_meal`
 - **Day summaries** — `get_day_summary` (one call: timetable, substitutions,
@@ -540,6 +486,8 @@ fully automatic.
 | `get_periods` | Bell schedule (period start/end times) |  |
 | `get_grades` | Grades, optionally by year & term |  |
 | `get_timeline` | Timeline notifications, one `category=` at a time: `recent`, `history` (since `date_from`), `homework`, `assignments`, `absences`, `events`, `news` (formerly `get_notifications`, `get_notification_history`, `get_homework`, `get_assignments`, `get_absences`, `get_upcoming_events`, `get_news`) |  |
+| `get_homework_material` | Full body text, dates and attachment list of one assignment, by `superid` from `get_timeline(category='homework')` → `additional_data.superid` |  |
+| `download_homework_file` | Download one attachment URL from `get_homework_material` to disk (default `<tempdir>/homework`, never overwrites) | ✅ disk |
 | `get_timetable_changes` | Substitutions / timetable changes for a date |  |
 | `get_missing_teachers` | Teachers missing on a date |  |
 | `get_day_summary` | One-call daily report (timetable, substitutions, teachers, grades, meals incl. breakfast/dinner when published, homework, assignments, absences, news, events, notifications) for a date; student by name/id (role-aware). **Discovery-first**: parent without `name`/`student_id` returns a lightweight per-school student index (`mode:"discovery"`); pass `full=True` to build full reports for every child. Bundles OpenCode skill `school-day-summary` for human-readable output. |  |
@@ -564,6 +512,10 @@ fully automatic.
 
 - Most tools are **read-only**. The ones marked **Writes? ✅** mutate EduPage
   state (sent messages, ordered meals, switched accounts). Use them with care.
+- `download_homework_file` is the one tool that writes to **local disk**: it saves
+  into `dest_dir` (default `<tempdir>/homework`), takes the name from the
+  server's `content-disposition` when present, and appends ` (1)`, ` (2)`, ...
+  rather than overwriting anything.
 - `get_timeline` categories `homework`, `assignments`, `absences`, `events` and
   `news` derive their data from the **timeline notifications** — if the school
   doesn't push certain event types, those categories may return empty lists.
