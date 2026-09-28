@@ -56,40 +56,28 @@ Two other EduPage MCP servers exist: [`mrtineu/edupage-mcp`](https://github.com/
 wrap the same [`edupage-api`](https://github.com/EdupageAPI/edupage-api) library. Both are
 good and I have **no affiliation** with them — they are here for an honest comparison.
 
-| Capability | mhlavac | mrtineu | **this project** |
+MIT, 31 tools, `uvx`/pip/[MCP Registry](https://registry.modelcontextprotocol.io/) one-click install, `pytest` suite in CI —
+vs **mrtineu** (Apache-2.0, 13 tools, PyPI) and **mhlavac** (GPL-3.0, 26 tools, clone + `uv sync`).
+
+| Differentiator | mhlavac | mrtineu | **this project** |
 |---|---|---|---|
-| Install | clone + `uv sync` | `uvx edupage-mcp` | `uvx edupage-mcp-full`, `pip`, or [MCP Registry](https://registry.modelcontextprotocol.io/) one-click |
-| Tools | 26 | 13 | 31 *(consolidated — see below)* |
-| License | GPL-3.0 | Apache-2.0 | **MIT** |
-| **Advanced login** — 2FA, `PHPSESSID` | ❌ | ❌ | ✅ |
-| **Multiple schools** in one deployment | ✅ | ❌ | ✅ |
-| Parent — list children / switch into a child | ✅ / ❌ | ❌ | ✅ / ✅ |
-| Timetables — own, student, teacher, class, room | ✅ | ✅ | ✅ |
-| **Homework** — body text + attachments, file download | ❌ | ✅ | ✅ |
-| Meals — **choose / sign-off / rate** | ❌ | ❌ | ✅ |
-| Send messages | ✅ | ❌ | ✅ |
-| Live next bell (`get_next_ringing_time`) | ❌ | ❌ | ✅ |
-| Raw custom HTTP request | ❌ | ❌ | ✅ |
-| Auto re-login on an expired session | ❌ | ✅ | ✅ |
-| One-call day report | ✅ *(last N days)* | ❌ | ✅ *(one day)* |
+| **Writes** — meals, messages, child switching | meals only | ❌ | ✅ |
+| **2FA** completion, `PHPSESSID` | ❌ | ❌ | ✅ |
+| **Multiple schools**, one deployment | ✅ | ❌ | ✅ |
+| Homework body + attachments, file download | ❌ | ✅ | ✅ |
+| Live next bell, raw custom request | ❌ | ❌ | ✅ |
+| Auto re-login on expired session | ❌ | ✅ | ✅ |
 | **"Is the kid at school today?"** | ✅ | ❌ | ❌ |
-| Test suite | ✅ | ❌ | ✅ |
 
-**Where the other two are genuinely better:** `mhlavac` has
-[`get_school_days`](https://github.com/mhlavac/edupage-mcp) — "is my kid at school today / over
-lunch?" from trips, excursions and absences (**this project has no equivalent**) — and merges its
-list-returning tools across schools behind a `school=` filter. `mrtineu` is a leaner,
-async-native codebase to read. **This project** is the one to pick if you need **writes** (meal
-ordering, messages, child switching), **2FA** completion or a **raw passthrough**.
+**Where they're better:** `mhlavac` has `get_school_days` — "is my kid at school today?" from
+trips and absences (**no equivalent here**) — and `mrtineu` is a leaner codebase to read. Pick
+this one for **writes**, **2FA** or a **raw passthrough**.
 
-Two caveats: this is the **newest and least-adopted** of the three (as of 2026-09-28, 25 days old,
-one star — `mhlavac` predates it by over six months), and **tool count is a poor metric** — this
-project folds families behind a discriminating parameter (`get_roster(roster_type=…)`,
-`get_timeline(category=…)`) rather than shipping near-identical tools, so 31 tools cover ground
-that takes the others 26 or 13 separate ones.
+Newest and least-adopted of the three (2026-09-28: 25 days old, one star). Tool count is a poor
+metric — families are folded behind a parameter (`get_roster(roster_type=…)`) rather than shipped
+as near-identical tools.
 
-*Facts checked against each project's source, GitHub metadata and PyPI on 2026-09-28. These
-projects move fast — if a row is wrong, please open an issue rather than assuming it's deliberate.*
+*Facts checked 2026-09-28. If a row is wrong, please open an issue.*
 
 
 ---
