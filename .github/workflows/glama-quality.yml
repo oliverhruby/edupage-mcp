@@ -54,6 +54,8 @@ jobs:
             two_factor_finish
 
       - name: Create or update watchdog issue
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           LABEL="glama-quality"
