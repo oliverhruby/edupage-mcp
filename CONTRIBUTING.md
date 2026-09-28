@@ -106,7 +106,12 @@ fail if the tag does not match the package version.
 
 - **[Publish](.github/workflows/publish.yml)** – publishes
   `edupage-mcp-full` to PyPI via OIDC trusted publishing (no API token; the
-  one-time publisher registration is documented in the file header).
+  one-time publisher registration is documented in the file header). A final
+  step smoke-checks the Glama directory listing for `oliverhruby/edupage-mcp`
+  through the Glama API: it needs the `GLAMA_API_KEY` secret, skips cleanly when
+  that secret is unset, and on a non-200 only emits a `::warning::` pointing at
+  the registry entry. It deliberately does **not** gate the release — quality
+  grading is enforced by the watchdog under *Scheduled watchdogs* below.
 - **[Release](.github/workflows/release.yml)** – creates a GitHub Release with
   auto-generated notes.
 - **[Publish Container](.github/workflows/publish-container.yml)** – builds
