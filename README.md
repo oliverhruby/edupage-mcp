@@ -67,11 +67,9 @@ vs **mrtineu** (Apache-2.0, 13 tools, PyPI) and **mhlavac** (GPL-3.0, 26 tools, 
 | Homework body + attachments, file download | ❌ | ✅ | ✅ |
 | Live next bell, raw custom request | ❌ | ❌ | ✅ |
 | Auto re-login on expired session | ❌ | ✅ | ✅ |
-| **"Is the kid at school today?"** | ✅ | ❌ | ❌ |
 
-**Where they're better:** `mhlavac` has `get_school_days` — "is my kid at school today?" from
-trips and absences (**no equivalent here**) — and `mrtineu` is a leaner codebase to read. Pick
-this one for **writes**, **2FA** or a **raw passthrough**.
+**Where they're better:** `mhlavac` has a broader read surface, and `mrtineu` is a leaner codebase
+to read. Pick this one for **writes**, **2FA** or a **raw passthrough**.
 
 Newest and least-adopted of the three (2026-09-28: 25 days old, one star). Tool count is a poor
 metric — families are folded behind a parameter (`get_roster(roster_type=…)`) rather than shipped
