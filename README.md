@@ -3,7 +3,7 @@
 <!-- mcp-name: io.github.oliverhruby/edupage-mcp -->
 
 [![GitHub release](https://img.shields.io/github/v/tag/oliverhruby/edupage-mcp.svg?sort=semver&label=release)](https://github.com/oliverhruby/edupage-mcp/releases)
-[![Glama Grade](https://glama.ai/mcp/servers/oliverhruby/edupage-mcp/badge)](https://glama.ai/mcp/servers/oliverhruby/edupage-mcp)
+[![Glama Grade](https://img.shields.io/badge/Glama-A-success)](https://glama.ai/mcp/servers/oliverhruby/edupage-mcp)
 [![Quality gates](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/quality-gates.yml.svg?label=quality%20gates)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/quality-gates.yml)
 [![Security](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/security.yml.svg?label=security)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/security.yml)
 [![Container security](https://img.shields.io/github/actions/workflow/status/oliverhruby/edupage-mcp/container-security.yml.svg?label=container%20security)](https://github.com/oliverhruby/edupage-mcp/actions/workflows/container-security.yml)

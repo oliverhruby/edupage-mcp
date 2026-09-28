@@ -85,6 +85,47 @@ def parse_tools(html: str) -> list[tuple[str, str]]:
     return [(name, grade) for name, grade in TOOL_RE.findall(html)]
 
 
+_README_BADGE_RE = re.compile(
+    r"img\.shields\.io/badge/Glama-([A-F])\b[^)\s]*", re.IGNORECASE
+)
+
+
+def check_readme_badge(tools: list[tuple[str, str]]) -> list[str]:
+    """Verify the grade letter baked into the README badge still matches Glama.
+
+    Glama's own `/badge` endpoint renders a fixed 760x400 PNG (every size/style
+    parameter is ignored), which is far too large to sit inline with the other
+    shields.io badges, so the README carries a small flat badge instead. That
+    letter is static and would otherwise rot silently, so derive the expected
+    worst letter from the per-tool grades parsed off the public page - no API key
+    needed - and report any drift.
+    """
+    if not tools:
+        return []
+
+    notes: list[str] = []
+    try:
+        readme = pathlib.Path("README.md").read_text(encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001
+        return [f"README badge check skipped: {exc}"]
+
+    match = _README_BADGE_RE.search(readme)
+    if not match:
+        return ["README badge carries no Glama grade (expected a "
+                "img.shields.io/badge/Glama-<A-F> badge)"]
+
+    badged = match.group(1).upper()
+    letters = sorted({grade.upper() for _, grade in tools})
+    # A is the best grade, so the worst grade is the LAST one alphabetically
+    worst = letters[-1]
+    if badged != worst:
+        notes.append(
+            f"README Glama badge says {badged} but the worst tool grade is {worst} "
+            f"(grades present: {', '.join(letters)}) - update the badge in README.md"
+        )
+    return notes
+
+
 def fetch_page_with_retry(url: str) -> tuple[str, list[str]]:
     """Fetch the Glama page until it yields at least one tool badge.
 
@@ -241,6 +282,10 @@ def main() -> int:
         results["tools"] = tools
         results["letters_total"] = len(tools)
         results["letters_below"] = [(n, g) for n, g in tools if g not in allowed]
+        badge_notes = check_readme_badge(tools)
+        if badge_notes:
+            results["notes"].extend(badge_notes)
+            results["badge_drift"] = True
         served_names = {n for n, _ in tools}
         if expected:
             results["inventory_drift"] = {
@@ -291,6 +336,8 @@ def main() -> int:
         return 2
 
     violations = bool(results["letters_below"]) or bool(results.get("score_below")) or bool(
+        results.get("badge_drift")
+    ) or bool(
         (results.get("inventory_drift") or {}).get("missing")
     ) or bool((results.get("inventory_drift") or {}).get("extra"))
 
