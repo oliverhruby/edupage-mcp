@@ -34,7 +34,14 @@ process, CI/CD workflow reference, Conventional Commits — lives in
    Google-style `Args:` block. Every tool docstring must therefore carry an
    `Args:` block and, where relevant, a cross-reference telling agents which
    sibling tool to use instead. Keep them dense — no credit for restating the
-   schema.
+   schema. Glama's weakest dimension is `behavioralTransparency`, and the
+   grader opens most verdicts with "with no annotations, the description
+   carries the full burden" — so every tool also needs a `TOOL_ANNOTATIONS`
+   entry (`readOnlyHint` / `destructiveHint` / `idempotentHint` /
+   `openWorldHint`). The annotations say *whether* a call mutates and whether
+   retrying is safe; the docstring says *what* it does. Neither replaces the
+   other, and `tests/unit/test_tool_annotations.py` fails the build if a new
+   tool ships without a registry entry or disagrees with its own docstring.
 
 5. **Follow the tool skeleton in `src/edupage_mcp/__init__.py`:** `@_tool`
    functions returning `_run(go, "name")`. `_tool` keeps the fn plain-callable

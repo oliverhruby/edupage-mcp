@@ -67,11 +67,13 @@ try:
     from mcp.server.fastmcp import FastMCP
     from mcp.server.auth.provider import AccessToken, TokenVerifier
     from mcp.server.auth.settings import AuthSettings
+    from mcp.types import ToolAnnotations
 except Exception:
     FastMCP = None
     AccessToken = None
     TokenVerifier = None
     AuthSettings = None
+    ToolAnnotations = None
 
 EDUPAGE_USERNAME = os.environ.get("EDUPAGE_USERNAME", "")
 EDUPAGE_PASSWORD = os.environ.get("EDUPAGE_PASSWORD", "")
@@ -517,9 +519,110 @@ else:
     server = None
 
 
+# --------------------------------------------------------------------------
+# MCP tool annotations
+#
+# Every tool advertises its behavioural contract instead of leaving it to the
+# docstring. `readOnlyHint` and friends are MCP-standard hints, and clients use
+# them to decide whether a call needs confirmation.
+#
+#   readOnlyHint      the call changes no server-side state
+#   destructiveHint   the call can remove/overwrite something irrecoverably
+#   idempotentHint    repeating the call has the same effect as calling once
+#   openWorldHint     the call touches entities outside this server
+#
+# Rule 4 (docstrings are product) still holds: annotations state *whether* a
+# call mutates and whether retrying is safe, the docstring states *what* it
+# does. Neither replaces the other.
+# --------------------------------------------------------------------------
+_READ = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+# Writes that are reversible or a pure re-statement of current state.
+_WRITE_SAFE = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+# Writes that remove/overwrite something, or are not safe to replay.
+_WRITE_DESTRUCTIVE = {
+    "readOnlyHint": False,
+    "destructiveHint": True,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+_WRITE_NON_IDEMPOTENT = {
+    "readOnlyHint": False,
+    "destructiveHint": True,
+    "idempotentHint": False,
+    "openWorldHint": True,
+}
+# Local-only state: no request leaves the process.
+_LOCAL_WRITE = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": False,
+}
+
+TOOL_ANNOTATIONS = {
+    # --- login / session ---------------------------------------------------
+    # Re-running a login replaces the same session, so it is idempotent.
+    "login": _WRITE_SAFE,
+    "login_all": _WRITE_SAFE,
+    "two_factor_finish": _WRITE_SAFE,
+    # Session routing is process-local and reversible by the paired switch.
+    "switch_to_student": _LOCAL_WRITE,
+    "switch_to_parent": _LOCAL_WRITE,
+    # Drops a cache that is rebuilt on the next lookup, not user data.
+    "clear_student_cache": _LOCAL_WRITE,
+    # --- read-only ---------------------------------------------------------
+    "get_school_year": _READ,
+    "get_my_timetable": _READ,
+    "get_student_timetable": _READ,
+    "get_timetable": _READ,
+    "get_next_ringing_time": _READ,
+    "get_next_week_timetable": _READ,
+    "get_periods": _READ,
+    "get_grades": _READ,
+    "get_timeline": _READ,
+    "get_homework_material": _READ,
+    "get_timetable_changes": _READ,
+    "get_missing_teachers": _READ,
+    "get_meals": _READ,
+    "get_day_summary": _READ,
+    "get_roster": _READ,
+    "get_my_students": _READ,
+    "find_student": _READ,
+    "get_subdomains": _READ,
+    "scan_students": _READ,
+    # --- canteen / messaging writes ---------------------------------------
+    # Booking the same menu twice is the same booking.
+    "choose_meal": _WRITE_SAFE,
+    # Releases a booking, and re-cancelling an already-cancelled meal is a no-op.
+    "sign_off_meal": _WRITE_DESTRUCTIVE,
+    # Overwrites any previous rating for the same date and meal type.
+    "rate_meal": _WRITE_DESTRUCTIVE,
+    # Each call posts another message; there is no send-once semantics.
+    "send_message": _WRITE_NON_IDEMPOTENT,
+    # --- filesystem --------------------------------------------------------
+    # Creates a local file. `_hw_dedupe_path` never clobbers an existing
+    # download, so a retry lands beside it rather than replacing it.
+    "download_homework_file": _WRITE_DESTRUCTIVE,
+    # Raw passthrough: capability depends entirely on the endpoint called.
+    "custom_request": _WRITE_NON_IDEMPOTENT,
+}
+
+
 def _tool(fn):
+    hints = TOOL_ANNOTATIONS.get(fn.__name__)
     if server is not None:
-        return server.tool()(fn)
+        annotations = ToolAnnotations(**hints) if (hints and ToolAnnotations) else None
+        return server.tool(annotations=annotations)(fn)
     return fn
 
 
