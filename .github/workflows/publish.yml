@@ -59,10 +59,14 @@ jobs:
         env:
           GLAMA_API_KEY: ${{ secrets.GLAMA_API_KEY }}
         run: |
+          if [ -z "${GLAMA_API_KEY}" ]; then
+            echo "GLAMA_API_KEY not set — Glama directory check skipped."
+            exit 0
+          fi
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: Bearer ${GLAMA_API_KEY}" \
             https://glama.ai/api/mcp/v1/servers/oliverhruby/edupage-mcp)
-          echo "Glama directory API status: ${STATUS} (200 = live, 404 = pending sync)"
+          echo "Glama directory API status: ${STATUS} (200 = live)"
           if [ "${STATUS}" != "200" ]; then
-            echo "::warning::Glama entry not live yet. Glama syncs automatically from the Official MCP Server Registry (publish-mcp-registry.yml); check https://glama.ai/mcp/servers/oliverhruby/edupage-mcp later."
+            echo "::warning::Glama listing for oliverhruby/edupage-mcp is unreachable (${STATUS}). The listing syncs from the Official MCP Server Registry, so a failure here usually means the registry entry is wrong rather than Glama being slow — check https://glama.ai/mcp/servers/oliverhruby/edupage-mcp. Quality grading is covered separately by the glama-quality workflow."
           fi
