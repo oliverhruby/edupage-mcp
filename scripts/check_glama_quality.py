@@ -24,6 +24,10 @@ Uses only the Python standard library. Outputs under ``reports/`` (gitignored):
 Exit code is 0 on a successful check; 2 on an UNPARSEABLE result
 (workflow turns red, no issue is touched); 1 on a programming/CLI error.
 
+The page fetch is retried up to FETCH_ATTEMPTS times, because Glama's live HTML
+is intermittently unreliable; per-attempt diagnostics land in the summary JSON's
+"notes" so a flaky fetch is distinguishable from genuine markup drift.
+
 Env vars:
   GLAMA_SERVER_URL      page to check (default: this project's Glama page)
   GLAMA_API_URL         directory API base (default: https://glama.ai/api/mcp)
@@ -44,6 +48,7 @@ import os
 import pathlib
 import re
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -52,6 +57,14 @@ DEFAULT_API = "https://glama.ai/api/mcp"
 DEFAULT_NAMESPACE = "oliverhruby"
 DEFAULT_SLUG = "edupage-mcp"
 MIN_TOOLS = 10
+
+# The page is scraped from live HTML, so both the TLS handshake and the presence
+# of the badge markup are intermittently unreliable in practice (observed:
+# sporadic CERTIFICATE_VERIFY_FAILED, and 200 responses carrying no badges).
+# Retry before declaring the page unusable, otherwise a flaky CDN edge turns the
+# whole watchdog red for a week.
+FETCH_ATTEMPTS = 4
+FETCH_BACKOFF_SECONDS = 3
 
 TOOL_RE = re.compile(
     r'/tools/([a-z_]+)"[^>]*>[^<]*</a><span class="[^"]*"[^>]*>([A-F])</span>'
@@ -70,6 +83,32 @@ def http_get(url: str, key: str | None = None, timeout: int = 60) -> str:
 def parse_tools(html: str) -> list[tuple[str, str]]:
     """Return (tool_name, grade_letter) pairs for every tool with a badge."""
     return [(name, grade) for name, grade in TOOL_RE.findall(html)]
+
+
+def fetch_page_with_retry(url: str) -> tuple[str, list[str]]:
+    """Fetch the Glama page until it yields at least one tool badge.
+
+    Returns ``(html, problems)``. ``html`` is empty only when every attempt
+    failed to produce a parseable page; ``problems`` then holds one line per
+    attempt so a transient transport failure is distinguishable from Glama
+    having changed its markup (which needs a scraper fix, not a retry).
+    """
+    problems: list[str] = []
+    for attempt in range(1, FETCH_ATTEMPTS + 1):
+        try:
+            html = http_get(url)
+        except Exception as exc:  # transport, TLS, timeout, HTTP error
+            problems.append(f"attempt {attempt}/{FETCH_ATTEMPTS}: fetch failed: {exc}")
+        else:
+            if parse_tools(html):
+                return html, problems
+            problems.append(
+                f"attempt {attempt}/{FETCH_ATTEMPTS}: fetched {len(html)} bytes "
+                "but found no tool badges"
+            )
+        if attempt < FETCH_ATTEMPTS:
+            time.sleep(FETCH_BACKOFF_SECONDS * attempt)
+    return "", problems
 
 
 def build_report(out_dir: pathlib.Path, results: dict, url: str) -> None:
@@ -169,12 +208,33 @@ def main() -> int:
 
     results: dict = {"allowed": sorted(allowed), "min_score": min_score, "notes": []}
 
-    try:
-        html = pathlib.Path(args.path).read_text(encoding="utf-8") if args.path else http_get(args.url)
-    except Exception as exc:
-        print(f"ERROR: could not load Glama page: {exc}")
-        results["notes"].append(f"page fetch failed: {exc}")
-        html = ""
+    if args.path:
+        try:
+            html = pathlib.Path(args.path).read_text(encoding="utf-8")
+        except Exception as exc:
+            print(f"ERROR: could not read {args.path}: {exc}")
+            results["notes"].append(f"local page read failed: {exc}")
+            html = ""
+    else:
+        html, fetch_problems = fetch_page_with_retry(args.url)
+        results["notes"].extend(fetch_problems)
+        if html:
+            if fetch_problems:
+                print(f"Loaded Glama page ({len(html)} bytes) after "
+                      f"{len(fetch_problems)} discarded attempt(s)")
+        else:
+            transport_only = all("fetch failed" in p for p in fetch_problems)
+            diagnosis = (
+                "every attempt failed at the transport layer — almost certainly "
+                "transient, not a quality regression"
+                if transport_only
+                else "the page loaded but carried no tool badges on every attempt — "
+                "Glama's markup likely changed and TOOL_RE needs updating"
+            )
+            print(f"ERROR: no parseable Glama page after {FETCH_ATTEMPTS} attempts")
+            results["notes"].append(f"page unusable: {diagnosis}")
+            for problem in fetch_problems:
+                print(f"  {problem}")
 
     tools = parse_tools(html) if html else []
     if tools:
@@ -226,7 +286,8 @@ def main() -> int:
                         "url": args.url, "notes": results["notes"]}, indent=2),
             encoding="utf-8",
         )
-        print("UNPARSEABLE: the page returned no tool badges")
+        print(f"UNPARSEABLE: no tool grades could be read from the page "
+              f"(after {FETCH_ATTEMPTS} attempt(s)); see notes in the summary JSON")
         return 2
 
     violations = bool(results["letters_below"]) or bool(results.get("score_below")) or bool(
