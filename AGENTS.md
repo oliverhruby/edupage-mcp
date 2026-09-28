@@ -23,7 +23,7 @@ process, CI/CD workflow reference, Conventional Commits — lives in
    discriminating `param=` (the consolidated `login` / `get_timeline` /
    `get_roster` / `get_timetable` families are the model) over many
    near-identical tools. Adding or removing tools MUST update, in the same
-   change: the `>=28` tool floor in `.github/workflows/quality-gates.yml`, the
+   change: the `>=30` tool floor in `.github/workflows/quality-gates.yml`, the
    `GLAMA_EXPECTED_TOOLS` list in `.github/workflows/glama-quality.yml`, the
    README tool table + "What it provides" count, and the `tests/e2e` tool
    manifests (`test_manifest.py`, `test_readonly_tools.py`).
@@ -61,6 +61,16 @@ process, CI/CD workflow reference, Conventional Commits — lives in
    (GitHub runners cannot reach `edupage.org`) — use `run_e2e.ps1` locally on
    the owner's machine. Fingerprint regeneration is owner-only; its commit
    message must not contain identities.
+
+9. **Deliberate rule-1 exception: the material-player parser.**
+   `get_homework_material` and `download_homework_file` parse the
+   `.etestPlayer(...)` payload of
+   `/elearning/?cmd=MaterialPlayer&superid=…` **locally**, because
+   `edupage-api` ships no homework/material reader (only the `homework` /
+   `etesthw` constants in `timeline.py`). All HTTP still goes through
+   upstream's `Edupage.custom_request` — no session/auth/endpoint code is
+   duplicated. Next agent: check whether `edupage-api` has gained a reader; if
+   it has, delete the `_hw_*` / `_html_to_text` helpers and delegate.
 
 ## Before shipping
 

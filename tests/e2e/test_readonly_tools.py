@@ -58,6 +58,13 @@ TOOLS = {
         "date_from": (dt.date.today() - dt.timedelta(days=14)).isoformat(),
         "subdomain": "@sub",
     },
+    # Deep homework: the manifest is static and no real `superid` may be
+    # committed (e2e privacy), so probe the documented invalid-id path — the
+    # tool must answer with the actionable "no material data" error, never a
+    # stack trace. A real id is read from get_timeline(category='homework') ->
+    # notifications[].additional_data.superid.
+    "get_homework_material": {"superid": "0", "subdomain": "@sub",
+                              "known_error": "No homework material data"},
     "get_timetable_changes": {"subdomain": "@sub"},
     "get_missing_teachers": {"subdomain": "@sub"},
     "get_meals": {"date_str": _next_weekday().isoformat(), "subdomain": "@sub"},

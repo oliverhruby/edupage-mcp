@@ -130,7 +130,7 @@ schedule / manual dispatch):
 - **[Quality Gates](.github/workflows/quality-gates.yml)** – `python-sanity`
   compiles `src/edupage_mcp/__init__.py` and installs the package from source;
   `docker-mcp-smoke` builds the Docker image, performs an MCP stdio handshake
-  (`initialize` + `tools/list`, expecting ≥ 28 tools), and smokes the
+  (`initialize` + `tools/list`, expecting ≥ 30 tools), and smokes the
   `streamable-http` transport both with and without `MCP_API_KEY` (auth probes
   must be rejected).
 - **[Security](.github/workflows/security.yml)** – **required**; runs
