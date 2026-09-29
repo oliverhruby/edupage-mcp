@@ -2,13 +2,14 @@
 
 Exposes the full feature set of the `edupage-api` Python library as MCP tools:
 login (standard, auto, session-id, 2FA), timetables, school year, ringing,
-grades, notifications/history (homework, exams...), substitutions, missing
-teachers, meals (+ ordering), rosters (students/teachers/classes/classrooms/
-subjects), messages, role-aware student switching, multi-school auto-discovery,
-and custom requests.
+grades, notifications/history (homework, exams...), homework material bodies
+(+ attachment download), substitutions, missing teachers, meals (+ ordering),
+rosters (students/teachers/classes/classrooms/subjects), messages, role-aware
+student switching, multi-school auto-discovery, and custom requests.
 
-Careful: login/send_message/switch_to_student/meal actions mutate Edupage state.
-All `get_*` tools are read-only.
+Careful: login/send_message/switch_to_student/meal actions mutate Edupage state,
+and `download_homework_file` writes a file to local disk. All `get_*` tools are
+read-only.
 """
 
 import builtins
@@ -18,10 +19,12 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
 import unicodedata
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
-from urllib.parse import urlparse
+from pathlib import Path
+from urllib.parse import unquote, urlparse
 from dataclasses import fields, is_dataclass
 from datetime import date, datetime, time as dt_time
 from enum import Enum
@@ -64,11 +67,13 @@ try:
     from mcp.server.fastmcp import FastMCP
     from mcp.server.auth.provider import AccessToken, TokenVerifier
     from mcp.server.auth.settings import AuthSettings
+    from mcp.types import ToolAnnotations
 except Exception:
     FastMCP = None
     AccessToken = None
     TokenVerifier = None
     AuthSettings = None
+    ToolAnnotations = None
 
 EDUPAGE_USERNAME = os.environ.get("EDUPAGE_USERNAME", "")
 EDUPAGE_PASSWORD = os.environ.get("EDUPAGE_PASSWORD", "")
@@ -514,9 +519,110 @@ else:
     server = None
 
 
+# --------------------------------------------------------------------------
+# MCP tool annotations
+#
+# Every tool advertises its behavioural contract instead of leaving it to the
+# docstring. `readOnlyHint` and friends are MCP-standard hints, and clients use
+# them to decide whether a call needs confirmation.
+#
+#   readOnlyHint      the call changes no server-side state
+#   destructiveHint   the call can remove/overwrite something irrecoverably
+#   idempotentHint    repeating the call has the same effect as calling once
+#   openWorldHint     the call touches entities outside this server
+#
+# Rule 4 (docstrings are product) still holds: annotations state *whether* a
+# call mutates and whether retrying is safe, the docstring states *what* it
+# does. Neither replaces the other.
+# --------------------------------------------------------------------------
+_READ = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+# Writes that are reversible or a pure re-statement of current state.
+_WRITE_SAFE = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+# Writes that remove/overwrite something, or are not safe to replay.
+_WRITE_DESTRUCTIVE = {
+    "readOnlyHint": False,
+    "destructiveHint": True,
+    "idempotentHint": True,
+    "openWorldHint": True,
+}
+_WRITE_NON_IDEMPOTENT = {
+    "readOnlyHint": False,
+    "destructiveHint": True,
+    "idempotentHint": False,
+    "openWorldHint": True,
+}
+# Local-only state: no request leaves the process.
+_LOCAL_WRITE = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    "openWorldHint": False,
+}
+
+TOOL_ANNOTATIONS = {
+    # --- login / session ---------------------------------------------------
+    # Re-running a login replaces the same session, so it is idempotent.
+    "login": _WRITE_SAFE,
+    "login_all": _WRITE_SAFE,
+    "two_factor_finish": _WRITE_SAFE,
+    # Session routing is process-local and reversible by the paired switch.
+    "switch_to_student": _LOCAL_WRITE,
+    "switch_to_parent": _LOCAL_WRITE,
+    # Drops a cache that is rebuilt on the next lookup, not user data.
+    "clear_student_cache": _LOCAL_WRITE,
+    # --- read-only ---------------------------------------------------------
+    "get_school_year": _READ,
+    "get_my_timetable": _READ,
+    "get_student_timetable": _READ,
+    "get_timetable": _READ,
+    "get_next_ringing_time": _READ,
+    "get_next_week_timetable": _READ,
+    "get_periods": _READ,
+    "get_grades": _READ,
+    "get_timeline": _READ,
+    "get_homework_material": _READ,
+    "get_timetable_changes": _READ,
+    "get_missing_teachers": _READ,
+    "get_meals": _READ,
+    "get_day_summary": _READ,
+    "get_roster": _READ,
+    "get_my_students": _READ,
+    "find_student": _READ,
+    "get_subdomains": _READ,
+    "scan_students": _READ,
+    # --- canteen / messaging writes ---------------------------------------
+    # Booking the same menu twice is the same booking.
+    "choose_meal": _WRITE_SAFE,
+    # Releases a booking, and re-cancelling an already-cancelled meal is a no-op.
+    "sign_off_meal": _WRITE_DESTRUCTIVE,
+    # Overwrites any previous rating for the same date and meal type.
+    "rate_meal": _WRITE_DESTRUCTIVE,
+    # Each call posts another message; there is no send-once semantics.
+    "send_message": _WRITE_NON_IDEMPOTENT,
+    # --- filesystem --------------------------------------------------------
+    # Creates a local file. `_hw_dedupe_path` never clobbers an existing
+    # download, so a retry lands beside it rather than replacing it.
+    "download_homework_file": _WRITE_DESTRUCTIVE,
+    # Raw passthrough: capability depends entirely on the endpoint called.
+    "custom_request": _WRITE_NON_IDEMPOTENT,
+}
+
+
 def _tool(fn):
+    hints = TOOL_ANNOTATIONS.get(fn.__name__)
     if server is not None:
-        return server.tool()(fn)
+        annotations = ToolAnnotations(**hints) if (hints and ToolAnnotations) else None
+        return server.tool(annotations=annotations)(fn)
     return fn
 
 
@@ -1364,6 +1470,293 @@ def get_timeline(category: str = "recent", date_from: str = None, subdomain: str
         return {"subdomain": sub, "category": category, category: result}
 
     return _run(go, "get_timeline")
+
+
+# --------------------------------------------------------------------------
+# Homework material (assignment body text + attachments)
+#
+# Rule-1 exception (deliberate, see AGENTS.md): edupage-api ships NO
+# homework/material reader — only the `homework` / `etesthw` type constants in
+# timeline.py — so the material-player PAYLOAD PARSING below is necessarily
+# local. Every HTTP call still goes through upstream's own
+# `Edupage.custom_request` escape hatch with the school's base URL, exactly
+# like the `custom_request` tool; no session, auth or endpoint code is
+# duplicated here. Before keeping the local parser, check whether edupage-api
+# has gained a reader and, if so, delete these helpers and delegate to it.
+# --------------------------------------------------------------------------
+_HW_MARKER = ".etestPlayer("
+_HW_BLOCK_TAGS = re.compile(r"</(?:div|p|h[1-6]|li|tr)>|<br\s*/?>", re.IGNORECASE)
+_HW_TAG = re.compile(r"<[^>]+>")
+_HW_ILLEGAL_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+_HW_DISPOSITION_STAR = re.compile(r"filename\*\s*=\s*[^']*'[^']*'([^;]+)", re.IGNORECASE)
+_HW_DISPOSITION_PLAIN = re.compile(r'filename\s*=\s*"?([^";]+)"?', re.IGNORECASE)
+_HW_UPLOAD_MARKER = "[Student answer / file upload area]"
+
+
+def _hw_base_url(subdomain=None):
+    """(subdomain, base_url) for a school, using the same base-URL resolution as
+    the `custom_request` tool (`https://<subdomain>.edupage.org`)."""
+    sub = _resolve_subdomain(subdomain)
+    if not sub:
+        raise RuntimeError("Cannot build the school URL without a resolved subdomain.")
+    return sub, f"https://{sub}.edupage.org"
+
+
+def _html_to_text(fragment):
+    """Flatten EduPage's rich-text HTML into readable plain text."""
+    if not fragment:
+        return ""
+    text = _HW_BLOCK_TAGS.sub("\n", str(fragment))
+    text = _HW_TAG.sub("", text)
+    text = html.unescape(text)
+    lines = [line.strip() for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
+
+
+def _hw_walk_widget(widget, blocks, attachments):
+    """Depth-first walk of a material card's widget tree, collecting text blocks
+    and raw file entries. Unknown widget classes are ignored, but their
+    children are still walked."""
+    if not isinstance(widget, dict):
+        return
+    props = widget.get("props")
+    if not isinstance(props, dict):
+        props = {}
+    widget_class = widget.get("widgetClass")
+    if widget_class == "TitleETestWidget":
+        text = _html_to_text(props.get("text"))
+        if text:
+            blocks.append(text)
+    elif widget_class == "TextETestWidget":
+        text = _html_to_text(props.get("_parsedHtmlText") or props.get("htmlText"))
+        if text:
+            blocks.append(text)
+    elif widget_class == "FileETestWidget":
+        files = props.get("files")
+        for entry in (files if isinstance(files, list) else []):
+            if not isinstance(entry, dict):
+                continue
+            src = entry.get("src")
+            if not src:
+                continue
+            attachments.append({"name": entry.get("name") or "", "src": str(src)})
+    elif widget_class == "ElaborationETestWidget":
+        if props.get("enableUpload") == "enabled":
+            blocks.append(_HW_UPLOAD_MARKER)
+    children = widget.get("widgets")
+    for child in (children if isinstance(children, list) else []):
+        _hw_walk_widget(child, blocks, attachments)
+
+
+def _hw_parse_material_player(page_html, superid):
+    """Extract the JSON object embedded after the `.etestPlayer(` marker."""
+    idx = page_html.find(_HW_MARKER)
+    if idx == -1:
+        raise RuntimeError(
+            f"No homework material data in the page for superid '{superid}'. The "
+            "material id is invalid, the material is not visible to this account, or "
+            "the school no longer serves it. Discover valid ids with "
+            "get_timeline(category='homework') -> notifications[].additional_data.superid."
+        )
+    try:
+        player, _ = json.JSONDecoder().raw_decode(page_html[idx + len(_HW_MARKER):])
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(
+            f"The material page for superid '{superid}' embedded malformed player "
+            f"data ({exc}). Retry with a fresh superid from get_timeline."
+        ) from exc
+    return player if isinstance(player, dict) else {}
+
+
+def _hw_build_material(page_html, base_url, superid):
+    """Parse a material-player page into the payload `get_homework_material`
+    returns (minus `subdomain`)."""
+    player = _hw_parse_material_player(page_html, superid)
+    material = player.get("materialData")
+    if not isinstance(material, dict):
+        material = {}
+    super_row = player.get("superRow")
+    hw_row = (super_row.get("hwRow") if isinstance(super_row, dict) else None)
+    if not isinstance(hw_row, dict):
+        hw_row = {}
+
+    blocks = []
+    raw_attachments = []
+    cards_data = material.get("cardsData")
+    # Verified live 2026-09-28: EduPage serves `cardsData` as a LIST, not a dict
+    # keyed by card id, so accept either shape rather than assuming one.
+    if isinstance(cards_data, dict):
+        card_iter = list(cards_data.values())
+    elif isinstance(cards_data, list):
+        card_iter = cards_data
+    else:
+        card_iter = []
+    for card in card_iter:
+        if not isinstance(card, dict) or not card.get("content"):
+            continue
+        try:
+            content = json.loads(card["content"])
+        except (TypeError, ValueError):
+            continue
+        _hw_walk_widget(content, blocks, raw_attachments)
+
+    attachments = []
+    for attachment in raw_attachments:
+        src = attachment["src"]
+        url = src if src.startswith("http") else f"{base_url}/{src.lstrip('/')}"
+        attachments.append({"name": attachment.get("name") or url.rsplit("/", 1)[-1],
+                            "url": url})
+
+    return {
+        "superid": str(superid),
+        "title": hw_row.get("name") or material.get("name"),
+        "details": _html_to_text(hw_row.get("details")) or None,
+        "date_from": hw_row.get("datefrom"),
+        "date_to": hw_row.get("dateto"),
+        "content": "\n\n".join(blocks),
+        "attachments": attachments,
+    }
+
+
+def _hw_sanitize_filename(name):
+    """Reduce a server- or caller-supplied name to a safe, bare file name:
+    no directory components, no characters illegal on the filesystem."""
+    safe = Path(str(name or "")).name  # drops every directory component
+    safe = _HW_ILLEGAL_FILENAME_CHARS.sub("_", safe).strip(" .")
+    return safe or "download"
+
+
+def _hw_dedupe_path(path):
+    """Never overwrite: return `path` or the first free 'name (n).ext' variant."""
+    if not path.exists():
+        return path
+    counter = 1
+    candidate = path
+    while candidate.exists():
+        candidate = path.with_name(f"{path.stem} ({counter}){path.suffix}")
+        counter += 1
+    return candidate
+
+
+def _hw_filename_from_response(response, fallback_url):
+    """Name the server suggests: RFC 5987 `filename*`, then `filename`, else the
+    URL path."""
+    try:
+        disposition = response.headers.get("content-disposition") or ""
+    except Exception:  # noqa: BLE001 - a header-less fake response is fine
+        disposition = ""
+    star = _HW_DISPOSITION_STAR.search(disposition)
+    if star:
+        return unquote(star.group(1).strip().strip('"'))
+    plain = _HW_DISPOSITION_PLAIN.search(disposition)
+    if plain:
+        return plain.group(1).strip()
+    return urlparse(fallback_url).path.rsplit("/", 1)[-1] or "download"
+
+
+@_tool
+def get_homework_material(superid: str, subdomain: str = None) -> dict:
+    """Full body text and attachment list of one homework/assignment material.
+    Read-only.
+
+    Fetches the school's material-player page for `superid` and flattens its
+    widget tree into plain text plus absolute attachment URLs — the timeline
+    notification carries only a short summary, never the assignment body or the
+    attachment list, so this is the only way to read what the assignment says.
+
+    Args:
+        superid: Material id, taken from `additional_data.superid` of a
+            notification returned by `get_timeline(category='homework')`.
+        subdomain: School whose session to use (defaults to the active subdomain).
+
+    Returns:
+        dict: {'subdomain', 'superid', 'title', 'details', 'date_from',
+        'date_to', 'content', 'attachments'}. Each attachment is
+        {'name', 'url'} with an absolute URL — hand `url` to
+        `download_homework_file` to save it.
+
+    Notes:
+        - Discover ids first: `get_timeline(category='homework')` (or
+          `category='assignments'`) and read `additional_data.superid`. For a
+          whole day of homework plus everything else prefer `get_day_summary`.
+        - An invalid, expired or invisible id returns an actionable error, not a
+          stack trace.
+        - `content` is plain text; an enabled student upload area is rendered
+          as '[Student answer / file upload area]'.
+    """
+    def go():
+        client = _require_client(subdomain)
+        sub, base_url = _hw_base_url(subdomain)
+        resp = client.custom_request(
+            f"{base_url}/elearning/?cmd=MaterialPlayer&superid={superid}", "GET")
+        status = getattr(resp, "status_code", 0)
+        if status != 200:
+            raise RuntimeError(
+                f"EduPage returned HTTP {status} for the material page of superid "
+                f"'{superid}'. Re-check the id with get_timeline(category='homework')."
+            )
+        material = _hw_build_material(resp.text or "", base_url, superid)
+        return _serialize({"subdomain": sub, **material})
+
+    return _run(go, "get_homework_material")
+
+
+@_tool
+def download_homework_file(url: str, dest_dir: str = None, filename: str = None,
+                           subdomain: str = None) -> dict:
+    """Download one homework attachment to disk. Writes: creates a local file.
+
+    Takes an `url` from `get_homework_material`, fetches it through the school's
+    logged-in session and writes it into `dest_dir` (default: a `homework`
+    folder under the OS temp dir). An existing file is never overwritten — a
+    ' (1)', ' (2)', ... suffix is appended instead.
+
+    Args:
+        url: Absolute attachment URL exactly as returned by
+            `get_homework_material`; the request is authenticated with the
+            school's session.
+        dest_dir: Directory to save into, created when missing. Defaults to
+            `<tempdir>/homework` (e.g. `.../AppData/Local/Temp/homework`).
+        filename: Save under this name instead of the server-suggested one.
+            Directory components and characters illegal on the filesystem are
+            stripped, so the file always lands directly inside `dest_dir`.
+        subdomain: School whose session authenticates the request (defaults to
+            the active subdomain).
+
+    Returns:
+        dict: {'saved_to', 'bytes', 'source_url', 'name'}.
+
+    Notes:
+        - The only tool in this server that writes to disk, and the only one
+          excluded from the read-only e2e suite — call it only on request.
+        - Run `get_homework_material` first: it lists the attachment URLs, so
+          never guess or construct one.
+        - The name comes from `content-disposition` when the server sends it,
+          otherwise from the URL path.
+        - Bounded by the library session's 5 s request timeout
+          (`Edupage(request_timeout=5)`), so very large attachments can fail.
+    """
+    def go():
+        client = _require_client(subdomain)
+        resp = client.custom_request(url, "GET")
+        status = getattr(resp, "status_code", 0)
+        if status != 200:
+            raise RuntimeError(
+                f"Downloading {url} returned HTTP {status}. The link may have "
+                "expired — re-run `get_homework_material` for a fresh URL."
+            )
+        name = _hw_sanitize_filename(filename or _hw_filename_from_response(resp, url))
+        dest = Path(dest_dir) if dest_dir else Path(tempfile.gettempdir()) / "homework"
+        dest.mkdir(parents=True, exist_ok=True)
+        path = _hw_dedupe_path(dest / name)
+        if path.parent != dest:  # defence in depth: a sanitized name cannot traverse
+            raise RuntimeError(f"Refusing to save outside '{dest}'.")
+        body = resp.content or b""
+        path.write_bytes(body)
+        return {"saved_to": str(path), "bytes": len(body), "source_url": url,
+                "name": path.name}
+
+    return _run(go, "download_homework_file")
 
 
 # --------------------------------------------------------------------------

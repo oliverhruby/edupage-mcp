@@ -44,8 +44,9 @@ jobs:
           GLAMA_ALLOWED: A
           GLAMA_MIN_SCORE: "4.0"
           GLAMA_EXPECTED_TOOLS: >-
-            choose_meal, clear_student_cache, custom_request, find_student,
-            get_day_summary, get_grades, get_meals, get_missing_teachers,
+            choose_meal, clear_student_cache, custom_request,
+            download_homework_file, find_student, get_day_summary, get_grades,
+            get_homework_material, get_meals, get_missing_teachers,
             get_my_students, get_my_timetable, get_next_ringing_time,
             get_next_week_timetable, get_periods, get_roster, get_school_year,
             get_subdomains, get_student_timetable, get_timeline, get_timetable,
