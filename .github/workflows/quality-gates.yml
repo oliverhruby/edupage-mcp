@@ -25,6 +25,15 @@ jobs:
       - name: Install package from source
         run: python -m pip install --upgrade pip && python -m pip install .
 
+      - name: Install pytest
+        run: python -m pip install pytest
+
+      # The unit suite is the fast, credential-free safety net: it must gate
+      # every change. It used to run only on the maintainer's machine, so a
+      # broken test could not block a merge.
+      - name: Run unit test suite
+        run: python -m pytest tests/unit -q --no-header
+
   docker-mcp-smoke:
     runs-on: ubuntu-latest
     steps:
