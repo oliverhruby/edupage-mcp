@@ -19,6 +19,10 @@ jobs:
   publish-mcp-registry:
     runs-on: ubuntu-latest
     environment: release
+    # Metadata publish only; OIDC login is sub-second. Fail fast so an auth
+    # regression is obvious instead of hanging for the 15-minute device-code
+    # expiry.
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
 
@@ -64,7 +68,11 @@ jobs:
         run: mcp-publisher validate server.json
 
       - name: Login to MCP Registry (GitHub OIDC)
-        run: mcp-publisher login github
+        # Must be `github-oidc`, not `github`: `github` is the interactive
+        # device-code flow, which cannot work on a runner and burned 15
+        # minutes per publish before failing. `github-oidc` exchanges the
+        # Actions OIDC token (id-token: write above) and needs no secret.
+        run: mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
         run: mcp-publisher publish server.json
