@@ -2224,16 +2224,28 @@ _EVENT_TYPES = {
 _EVENT_TYPES.discard(None)
 
 
-def _timeline_on_day(client, d, types):
-    """Timeline notifications whose timestamp falls on date `d`, optionally
-    restricted to a set of event types (None = all types)."""
+def _timeline_on_day(client, d, types, *, prefer_deadline=False):
+    """Timeline notifications belonging to date `d`, optionally restricted to a
+    set of event types (None = all types).
+
+    With `prefer_deadline=True` an event is matched on its `event_time` (the
+    homework/exam due date, EduPage's `cas_udalosti`) instead of its
+    `timestamp` (when the entry was published). The two differ by days in
+    practice: a teacher routinely assigns on Monday for the following week, so
+    matching on `timestamp` hides homework that is due tomorrow from every
+    query except the one for the day it happened to be assigned. Events with no
+    `event_time` (edupage-api < 0.12.7, or a type that carries no deadline)
+    fall back to `timestamp`, so no event is dropped either way.
+    """
     events = client.get_notifications() or []
     result = []
     for e in events:
-        ts = getattr(e, "timestamp", None)
-        if ts is None or ts.date() != d:
-            continue
         if types is not None and e.event_type not in types:
+            continue
+        stamp = getattr(e, "event_time", None) if prefer_deadline else None
+        if stamp is None:
+            stamp = getattr(e, "timestamp", None)
+        if stamp is None or stamp.date() != d:
             continue
         result.append(_serialize(e))
     return result
@@ -2415,8 +2427,10 @@ def get_day_summary(date_str: str = None, name: str = None, student_id: str = No
                     "teachers": _get_missing_teachers_for(client, sub, d)})
                 run_section("grades", lambda: _grades_on_day(client, d))
                 run_section("meals", lambda: {"meals": _meals_payload(client, d, sub)})
-                run_section("homework", lambda: {"homework": _timeline_on_day(client, d, _HOMEWORK_TYPES)})
-                run_section("assignments", lambda: {"assignments": _timeline_on_day(client, d, _EXAM_TYPES)})
+                run_section("homework", lambda: {"homework": _timeline_on_day(
+                    client, d, _HOMEWORK_TYPES, prefer_deadline=True)})
+                run_section("assignments", lambda: {"assignments": _timeline_on_day(
+                    client, d, _EXAM_TYPES, prefer_deadline=True)})
                 run_section("absences", lambda: {"absences": _timeline_on_day(client, d, _ABSENCE_TYPES)})
                 run_section("news", lambda: {"news": _timeline_on_day(client, d, {EventType.NEWS})})
                 run_section("events", lambda: {"events": _timeline_on_day(client, d, _EVENT_TYPES)})
