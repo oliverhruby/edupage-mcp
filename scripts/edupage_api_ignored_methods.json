@@ -3,6 +3,8 @@
     "from_session_id"
   ],
   "ignored_methods": {
-    "cloud_upload": "Not exposed as an MCP tool yet; low demand and would require additional schema for file payloads."
+    "cloud_upload": "Not exposed as an MCP tool yet; low demand and would require additional schema for file payloads.",
+    "get_text_grades": "New in edupage-api 0.13.0 (text grades / commendations). Deliberately not surfaced yet: get_grades already returns the numeric gradebook, and adding a tool is a surface decision that needs the rule 3 sync points (tool floor, GLAMA_EXPECTED_TOOLS, README count, e2e manifests) plus a Glama re-grade. Revisit when someone asks for commendations.",
+    "get_text_grades_for_term": "New in edupage-api 0.13.0 (text grades / commendations per year+term). Same reasoning as get_text_grades; both are the pair upstream added together."
   }
 }
