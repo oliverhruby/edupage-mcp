@@ -2270,7 +2270,20 @@ def get_day_summary(date_str: str = None, name: str = None, student_id: str = No
       Set `full=True` to instead build the full report for every child.
     - If omitted and logged in as student/teacher: report on the logged-in account.
     Every section is isolated — a failure in one section yields {"ok": false, "error": ...}
-    without failing the report."""
+    without failing the report.
+
+    Args:
+        date_str: YYYY-MM-DD to report on (default today).
+        name: Student to report for, by first/last/full name. Ambiguous names
+            surface every candidate instead of guessing. Ignored when
+            `student_id` is given; see `find_student` to resolve an id first.
+        student_id: person_id of the student (preferred, unambiguous). Found
+            across all schools unless `subdomain` scopes the lookup.
+        subdomain: School to report on (defaults to the active subdomain).
+        full: When no `name`/`student_id` is given and the account is a parent,
+            build the full report for every child instead of returning the
+            lightweight per-school index. Costs one section sweep per child.
+    """
     def go():
         d = _parse_date(date_str)
         discovery_errors = []
@@ -2668,7 +2681,8 @@ def get_subdomains() -> dict:
     server's session status per school, plus overall login state. Read-only.
 
     Args:
-        (none)
+        None. This tool takes no arguments — the active credentials and
+        `EDUPAGE_SUBDOMAINS` determine the result entirely.
 
     Returns:
         dict with:
@@ -2770,6 +2784,11 @@ def scan_students() -> dict:
     """Discover all students visible to the logged-in account across the discovery
     scope (the configured `EDUPAGE_SUBDOMAINS`, or every school when unset).
     Read-only; uses cached data to avoid redundant API calls.
+
+    Args:
+        None. This tool takes no arguments — the discovery scope is fixed by
+        `EDUPAGE_SUBDOMAINS` and the logged-in role, both of which are
+        environment/login state rather than per-call input.
 
     Returns:
         dict: {'students': [{name, student_id, class_id, subdomain}], 'total': n}.

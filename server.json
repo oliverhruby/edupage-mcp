@@ -39,11 +39,5 @@
         }
       ]
     }
-  ],
-  "remotes": [
-    {
-      "type": "streamable-http",
-      "url": "https://ghcr.io/oliverhruby/edupage-mcp:latest"
-    }
   ]
 }
