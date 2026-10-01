@@ -54,8 +54,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=ref,event=tag
-            type=raw,value=v${{ steps.version.outputs.value }}
+            type=raw,value=${{ steps.version.outputs.value }}
             type=raw,value=latest
 
       - name: Build and push image
