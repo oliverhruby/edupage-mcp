@@ -29,6 +29,7 @@ from dataclasses import fields, is_dataclass
 from datetime import date, datetime, time as dt_time
 from enum import Enum
 from types import SimpleNamespace
+from typing import Optional
 
 from edupage_api import Edupage
 from edupage_api import exceptions as edupage_exceptions
@@ -638,11 +639,11 @@ def _run(fn, error_label="edupage call"):
 # --------------------------------------------------------------------------
 @_tool
 def login(
-    username: str = None,
-    password: str = None,
-    subdomain: str = None,
-    method: str = "credentials",
-    session_id: str = None,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+    subdomain: Optional[str] = None,
+    method: Optional[str] = "credentials",
+    session_id: Optional[str] = None,
 ) -> dict:
     """Log in to Edupage for a school. Writes: establishes (or replaces) the
     server-side session for that subdomain.
@@ -675,6 +676,9 @@ def login(
           automatically at startup.
     """
     global _clients, _two_factor, _active_subdomain
+    # Explicit null (sent by some clients) must mean "use the default", not
+    # an unknown auth method.
+    method = method or "credentials"
 
     def go():
         global _clients, _two_factor, _active_subdomain
@@ -741,7 +745,7 @@ def login(
 
 
 @_tool
-def login_all(subdomains: str = None, usernames: str = None, passwords: str = None) -> dict:
+def login_all(subdomains: Optional[str] = None, usernames: Optional[str] = None, passwords: Optional[str] = None) -> dict:
     """Log in to one or more schools in a single call. Writes: establishes
     (or replaces) the server-side session for each subdomain.
 
@@ -805,7 +809,7 @@ def login_all(subdomains: str = None, usernames: str = None, passwords: str = No
 
 @_tool
 def two_factor_finish(
-    code: str = None, subdomain: str = None, poll_seconds: int = 60
+    code: Optional[str] = None, subdomain: Optional[str] = None, poll_seconds: Optional[int] = 60
 ) -> dict:
     """Finish a pending 2FA login. Writes: completes the pending auth flow.
     Only needed after a `login` that returned `two_factor_required: True`.
@@ -825,6 +829,8 @@ def two_factor_finish(
         within the poll window.
     """
     global _two_factor, _roles
+    # Explicit null (sent by some clients) must mean the default, not 0s.
+    poll_seconds = 60 if poll_seconds is None else poll_seconds
 
     def go():
         global _two_factor, _roles
@@ -857,7 +863,7 @@ def two_factor_finish(
 
 
 @_tool
-def get_school_year(subdomain: str = None) -> dict:
+def get_school_year(subdomain: Optional[str] = None) -> dict:
     """Return the current school year (starting year). Read-only.
 
     Args:
@@ -885,7 +891,7 @@ def _parse_date(value):
 
 
 @_tool
-def get_my_timetable(date_str: str = None, subdomain: str = None) -> dict:
+def get_my_timetable(date_str: Optional[str] = None, subdomain: Optional[str] = None) -> dict:
     """Get the timetable for the logged-in user on a date. Read-only.
 
     Args:
@@ -1164,7 +1170,7 @@ def _get_student_timetable(client, sub, student, d):
 
 
 @_tool
-def get_student_timetable(name: str = None, student_id: str = None, date_str: str = None, subdomain: str = None) -> dict:
+def get_student_timetable(name: Optional[str] = None, student_id: Optional[str] = None, date_str: Optional[str] = None, subdomain: Optional[str] = None) -> dict:
     """Get a student's timetable by first/last name OR person_id. Read-only.
     Without a `subdomain`, searches every school in the discovery scope (the
     configured `EDUPAGE_SUBDOMAINS`, or all logged-in schools when unset) and
@@ -1235,7 +1241,7 @@ def _target_timetable_day(client, target_type: str, target_id: str, d, subdomain
 
 
 @_tool
-def get_timetable(target_type: str, target_id: str, date_str: str = None, end_date: str = None, subdomain: str = None) -> dict:
+def get_timetable(target_type: str, target_id: str, date_str: Optional[str] = None, end_date: Optional[str] = None, subdomain: Optional[str] = None) -> dict:
     """Get the timetable for a teacher, student, class or classroom on a date
     (or a date range, see `end_date`). Read-only.
 
@@ -1280,7 +1286,7 @@ def get_timetable(target_type: str, target_id: str, date_str: str = None, end_da
 
 
 @_tool
-def get_next_ringing_time(date_time_str: str = None, subdomain: str = None) -> dict:
+def get_next_ringing_time(date_time_str: Optional[str] = None, subdomain: Optional[str] = None) -> dict:
     """Get the type (break/lesson) and time of the next school-bell ringing. Read-only.
 
     Args:
@@ -1306,7 +1312,7 @@ def get_next_ringing_time(date_time_str: str = None, subdomain: str = None) -> d
 
 
 @_tool
-def get_next_week_timetable(subdomain: str = None) -> dict:
+def get_next_week_timetable(subdomain: Optional[str] = None) -> dict:
     """Get the Mon-Fri timetable for next week for the logged-in user,
     grouped by weekday. Read-only.
 
@@ -1351,7 +1357,7 @@ def get_next_week_timetable(subdomain: str = None) -> dict:
 
 
 @_tool
-def get_periods(subdomain: str = None) -> dict:
+def get_periods(subdomain: Optional[str] = None) -> dict:
     """Get the bell schedule (periods with start/end times). Read-only.
 
     Args:
@@ -1377,7 +1383,7 @@ def get_periods(subdomain: str = None) -> dict:
 # Grades
 # --------------------------------------------------------------------------
 @_tool
-def get_grades(year: int = None, term: str = None, subdomain: str = None) -> dict:
+def get_grades(year: Optional[int] = None, term: Optional[str] = None, subdomain: Optional[str] = None) -> dict:
     """Get grades for the logged-in student. Read-only.
 
     Args:
@@ -1411,7 +1417,7 @@ def get_grades(year: int = None, term: str = None, subdomain: str = None) -> dic
 # Notifications / timeline (homework, exams, messages...)
 # --------------------------------------------------------------------------
 @_tool
-def get_timeline(category: str = "recent", date_from: str = None, subdomain: str = None) -> dict:
+def get_timeline(category: Optional[str] = "recent", date_from: Optional[str] = None, subdomain: Optional[str] = None) -> dict:
     """Get EduPage timeline notifications, filtered by category. Read-only.
 
     Args:
@@ -1439,6 +1445,12 @@ def get_timeline(category: str = "recent", date_from: str = None, subdomain: str
         - For a whole-day report (timetable, substitutions, meals, homework,
           events, news, grades) prefer `get_day_summary` — one call.
     """
+    # Some clients (n8n among them) send an explicit null for optional params
+    # instead of omitting them; `category=None` must mean the default, not an
+    # unknown category. Bound outside `go()` so it does not shadow the
+    # parameter and become an unbound local.
+    category = category or "recent"
+
     def go():
         client = _require_client(subdomain)
         sub = _resolve_subdomain(subdomain)
@@ -1655,7 +1667,7 @@ def _hw_filename_from_response(response, fallback_url):
 
 
 @_tool
-def get_homework_material(superid: str, subdomain: str = None) -> dict:
+def get_homework_material(superid: str, subdomain: Optional[str] = None) -> dict:
     """Full body text and attachment list of one homework/assignment material.
     Read-only.
 
@@ -1702,8 +1714,8 @@ def get_homework_material(superid: str, subdomain: str = None) -> dict:
 
 
 @_tool
-def download_homework_file(url: str, dest_dir: str = None, filename: str = None,
-                           subdomain: str = None) -> dict:
+def download_homework_file(url: str, dest_dir: Optional[str] = None, filename: Optional[str] = None,
+                           subdomain: Optional[str] = None) -> dict:
     """Download one homework attachment to disk. Writes: creates a local file.
 
     Takes an `url` from `get_homework_material`, fetches it through the school's
@@ -1795,7 +1807,7 @@ def _get_missing_teachers_for(client, sub, d):
 
 
 @_tool
-def get_timetable_changes(date_str: str = None, subdomain: str = None) -> dict:
+def get_timetable_changes(date_str: Optional[str] = None, subdomain: Optional[str] = None) -> dict:
     """Get substitution/timetable changes for a date (default today). Read-only.
 
     Args:
@@ -1820,7 +1832,7 @@ def get_timetable_changes(date_str: str = None, subdomain: str = None) -> dict:
 
 
 @_tool
-def get_missing_teachers(date_str: str = None, subdomain: str = None) -> dict:
+def get_missing_teachers(date_str: Optional[str] = None, subdomain: Optional[str] = None) -> dict:
     """Get teachers missing on a date (default today). Read-only.
 
     Args:
@@ -2079,7 +2091,7 @@ def _meals_payload(client, d, sub):
 
 
 @_tool
-def get_meals(date_str: str = None, subdomain: str = None) -> dict:
+def get_meals(date_str: Optional[str] = None, subdomain: Optional[str] = None) -> dict:
     """Get the meal menu for a date. Read-only. Always returns all five meal
     slots (breakfast, snack, lunch, afternoon_snack, dinner) — slots not
     published by the school are ``None``.
@@ -2108,7 +2120,7 @@ def get_meals(date_str: str = None, subdomain: str = None) -> dict:
 
 
 @_tool
-def choose_meal(date_str: str, meal_type: str, number: int, subdomain: str = None) -> dict:
+def choose_meal(date_str: str, meal_type: str, number: int, subdomain: Optional[str] = None) -> dict:
     """Order/choose a meal. Writes: books the selected menu for the date.
 
     Args:
@@ -2140,7 +2152,7 @@ def choose_meal(date_str: str, meal_type: str, number: int, subdomain: str = Non
 
 
 @_tool
-def sign_off_meal(date_str: str, meal_type: str, subdomain: str = None) -> dict:
+def sign_off_meal(date_str: str, meal_type: str, subdomain: Optional[str] = None) -> dict:
     """Cancel an ordered meal for a date. Writes: releases the booking.
 
     Args:
@@ -2165,7 +2177,7 @@ def sign_off_meal(date_str: str, meal_type: str, subdomain: str = None) -> dict:
 
 
 @_tool
-def rate_meal(date_str: str, meal_type: str, quality: int, quantity: int, subdomain: str = None) -> dict:
+def rate_meal(date_str: str, meal_type: str, quality: int, quantity: int, subdomain: Optional[str] = None) -> dict:
     """Rate a meal. Writes: submits quality/quantity ratings for a date and meal type.
 
     Args:
@@ -2266,8 +2278,8 @@ def _grades_on_day(client, d):
 
 
 @_tool
-def get_day_summary(date_str: str = None, name: str = None, student_id: str = None,
-                    subdomain: str = None, full: bool = False) -> dict:
+def get_day_summary(date_str: Optional[str] = None, name: Optional[str] = None, student_id: Optional[str] = None,
+                    subdomain: Optional[str] = None, full: Optional[bool] = False) -> dict:
     """One-call daily school report for a date (default today): timetable,
     substitutions, missing teachers, grades received that day, meals, homework,
     assignments, absences, news, events, and timeline notifications.
@@ -2451,7 +2463,7 @@ def get_day_summary(date_str: str = None, name: str = None, student_id: str = No
 # Rosters
 # --------------------------------------------------------------------------
 @_tool
-def get_roster(roster_type: str, subdomain: str = None) -> dict:
+def get_roster(roster_type: str, subdomain: Optional[str] = None) -> dict:
     """Get a school roster: students, teachers, classes, classrooms or subjects.
     Read-only.
 
@@ -2515,7 +2527,7 @@ def get_roster(roster_type: str, subdomain: str = None) -> dict:
 # Messages
 # --------------------------------------------------------------------------
 @_tool
-def send_message(recipient_id: str, body: str, subdomain: str = None) -> dict:
+def send_message(recipient_id: str, body: str, subdomain: Optional[str] = None) -> dict:
     """Send a message to a recipient. Writes: posts a new message on the
     recipient's timeline.
 
@@ -2546,7 +2558,7 @@ def send_message(recipient_id: str, body: str, subdomain: str = None) -> dict:
 # Students / accounts
 # --------------------------------------------------------------------------
 @_tool
-def get_my_students(subdomain: str = None) -> dict:
+def get_my_students(subdomain: Optional[str] = None) -> dict:
     """Get the students visible to the logged-in account. Read-only: parent
     accounts see their linked children (parsed from the school homepage);
     student/teacher accounts see classmates. Uses cached data.
@@ -2591,7 +2603,7 @@ def get_my_students(subdomain: str = None) -> dict:
 
 
 @_tool
-def switch_to_student(student_id: str = None, name: str = None, subdomain: str = None) -> dict:
+def switch_to_student(student_id: Optional[str] = None, name: Optional[str] = None, subdomain: Optional[str] = None) -> dict:
     """Switch the session to a student account (parent accounts only). Writes:
     changes which account subsequent tools operate as.
 
@@ -2621,7 +2633,7 @@ def switch_to_student(student_id: str = None, name: str = None, subdomain: str =
 
 
 @_tool
-def find_student(name: str, subdomain: str = None) -> dict:
+def find_student(name: str, subdomain: Optional[str] = None) -> dict:
     """Look up a student by first/last/full name using tiered matching. Read-only.
     Without a `subdomain`, searches ALL logged-in schools and returns one result
     per school where the student is found.
@@ -2766,7 +2778,7 @@ def get_subdomains() -> dict:
 
 
 @_tool
-def clear_student_cache(subdomain: str = None) -> dict:
+def clear_student_cache(subdomain: Optional[str] = None) -> dict:
     """Force refresh of cached student data. Writes: drops the local cache so the
     next student lookup re-fetches from EduPage. Call this after students are
     added/removed from a school, or if `scan_students`/`find_student` seems stale.
@@ -2852,7 +2864,7 @@ def _visible_students(client, subdomain=None):
 
 
 @_tool
-def switch_to_parent(subdomain: str = None) -> dict:
+def switch_to_parent(subdomain: Optional[str] = None) -> dict:
     """Switch the session back to the parent account (parent accounts only).
     Writes: changes which account subsequent tools operate as.
 
@@ -2878,7 +2890,7 @@ def switch_to_parent(subdomain: str = None) -> dict:
 # Custom
 # --------------------------------------------------------------------------
 @_tool
-def custom_request(url: str, method: str, data: str = "", headers: str = "{}", subdomain: str = None) -> dict:
+def custom_request(url: str, method: str, data: Optional[str] = "", headers: Optional[str] = "{}", subdomain: Optional[str] = None) -> dict:
     """Send a raw request to the Edupage server using the active session.
     Can perform writes depending on the endpoint — treat as write-capable.
 
@@ -2898,6 +2910,12 @@ def custom_request(url: str, method: str, data: str = "", headers: str = "{}", s
           tools — prefer those when available. Parse the returned text
           yourself; fields are not pre-serialized.
     """
+    # Explicit null (sent by some clients) must mean "empty", since both are
+    # forwarded verbatim to the upstream request call. Bound outside `go()` so
+    # the assignments do not shadow the parameters as function locals.
+    data = data or ""
+    headers = headers or "{}"
+
     def go():
         client = _require_client(subdomain)
         hdrs = json.loads(headers) if headers else {}

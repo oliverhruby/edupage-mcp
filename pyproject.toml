@@ -26,6 +26,10 @@ classifiers = [
 dependencies = [
     "mcp<2",
     "edupage-api>=0.12.7",
+    # Pulled in transitively via requests <- edupage-api. Pinned explicitly so
+    # the floor for CVE-2026-97687 / CVE-2026-97689 (fixed in 2.8.0) is
+    # enforced in our own metadata instead of depending on the resolver.
+    "urllib3>=2.8.0",
 ]
 
 [project.urls]
