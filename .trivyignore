@@ -27,17 +27,3 @@ CVE-2026-76642
 CVE-2026-78408
 CVE-2026-78409
 CVE-2026-78410
-
-# urllib3 CVEs fixed in 2.8.0, which IS what the image installs. The scanner
-# reports "Installed Version 2.7.0" against
-# /usr/local/lib/python3.11/site-packages/urllib3-2.8.0.dist-info/METADATA --
-# the path says 2.8.0 while the table says 2.7.0, i.e. a stale/duplicated
-# dist-info entry in the python:3.11-alpine base layer. Reproduces on
-# untouched main (v0.5.3), so it is not caused by any recent change.
-# pip's own output in the same build confirms urllib3-2.8.0.
-# https://avd.aquasec.com/nvd/cve-2026-97687
-# https://avd.aquasec.com/nvd/cve-2026-97689
-# Re-evaluate on the next base image bump / Trivy DB update.
-# Target removal: 2026-12-31.
-CVE-2026-97687
-CVE-2026-97689
