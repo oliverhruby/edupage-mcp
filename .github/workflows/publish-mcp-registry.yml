@@ -74,5 +74,25 @@ jobs:
         # Actions OIDC token (id-token: write above) and needs no secret.
         run: mcp-publisher login github-oidc
 
+      - name: Wait for the package to appear on PyPI
+        # The registry validates server.json against the live PyPI index, but
+        # this workflow runs in parallel with the PyPI publish on the same tag.
+        # The registry's own error for this is a 404 on the version, so wait it
+        # out instead of failing the release and needing a manual re-run.
+        env:
+          PACKAGE: edupage-mcp-full
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS "https://pypi.org/pypi/${PACKAGE}/${VERSION}/json" >/dev/null 2>&1; then
+              echo "${PACKAGE} ${VERSION} is visible on PyPI after ${i} attempt(s)"
+              exit 0
+            fi
+            echo "attempt ${i}: ${PACKAGE} ${VERSION} not yet on PyPI, waiting 20s"
+            sleep 20
+          done
+          echo "::error::${PACKAGE} ${VERSION} never appeared on PyPI"
+          exit 1
+
       - name: Publish to MCP Registry
         run: mcp-publisher publish server.json
