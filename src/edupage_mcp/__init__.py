@@ -1504,6 +1504,117 @@ _HW_DISPOSITION_STAR = re.compile(r"filename\*\s*=\s*[^']*'[^']*'([^;]+)", re.IG
 _HW_DISPOSITION_PLAIN = re.compile(r'filename\s*=\s*"?([^";]+)"?', re.IGNORECASE)
 _HW_UPLOAD_MARKER = "[Student answer / file upload area]"
 
+# --- body-type detection for the raw passthrough tools ---------------------
+# Verified live 2026-10-02 against iprskola: EduPage sends a real MIME type for
+# every attachment it serves (`…wordprocessingml.document`, `image/jpeg`,
+# `application/pdf`, all with `X-Content-Type-Options: nosniff`), so a
+# content-type check alone is enough and magic-byte sniffing is unnecessary.
+# The whitelist is therefore biased to under-detect: a response with no
+# Content-Type at all is treated as text, and a NUL byte in the first 4 kB is
+# the safety net for a server that ever mislabels a download as text.
+_CUSTOM_TEXT_MEDIA = frozenset({
+    "application/javascript", "application/ecmascript", "application/json",
+    "application/x-ndjson", "application/x-www-form-urlencoded", "application/xml",
+    "application/xhtml+xml", "application/yaml", "application/csv", "application/rtf",
+})
+_CUSTOM_TEXT_SUFFIXES = ("+xml", "+json")
+# Office/legacy-Office packages hold a ZIP binary even though some of their
+# subtypes carry a `+xml` suffix, so they never reach the whitelist above.
+_CUSTOM_BINARY_PREFIXES = (
+    "application/vnd.openxmlformats-", "application/vnd.ms-",
+    "application/vnd.oasis.opendocument",
+)
+# Chars of `text` `custom_request` returns before truncating. Kept under the
+# ~70 kB at which MCP clients start clipping the payload themselves, so the
+# truncation flag is ours and not theirs.
+_CUSTOM_TEXT_MAX = 60000
+
+
+def _hw_media_type(response):
+    """Lowercased media type of a response without the `;charset=` parameter;
+    '' when the server sends no Content-Type."""
+    try:
+        raw = response.headers.get("content-type") or ""
+    except Exception:  # noqa: BLE001 - a header-less fake response is fine
+        raw = ""
+    return raw.split(";")[0].strip().lower()
+
+
+def _hw_body_is_binary(content_type, body):
+    """True when the raw body must not be handed back as decoded text.
+
+    Raises only when confident: `text/*` and the structured-text types are
+    whitelisted, an absent Content-Type is treated as text, and Office packages
+    are excluded explicitly, so only a genuinely unknown media type or a NUL
+    byte in the first 4 kB marks a body binary.
+    """
+    media = (content_type or "").split(";")[0].strip().lower()
+    if media and not media.startswith(_CUSTOM_BINARY_PREFIXES) and (
+            media.startswith("text/")
+            or media in _CUSTOM_TEXT_MEDIA
+            or media.endswith(_CUSTOM_TEXT_SUFFIXES)):
+        return b"\x00" in body[:4096]
+    return bool(media) or b"\x00" in body[:4096]
+
+
+def _hw_absolute_url(url, subdomain=None):
+    """`url` as an absolute URL. A school-relative path — the
+    '/elearning/ruqjzfpv?z%3A…' form `get_timeline` returns attachment keys in —
+    is resolved against `https://<subdomain>.edupage.org`; a URL that already
+    carries a scheme is passed through untouched."""
+    if urlparse(url).scheme:
+        return url
+    _, base_url = _hw_base_url(subdomain)
+    return f"{base_url}/{url.lstrip('/')}"
+
+
+def _hw_disposition(response):
+    """The response's `content-disposition` header, or '' when absent."""
+    try:
+        return response.headers.get("content-disposition") or ""
+    except Exception:  # noqa: BLE001 - a header-less fake response is fine
+        return ""
+
+
+def _hw_reject_html_page(response, url):
+    """Refuse to save an EduPage web page as if it were the attachment.
+
+    Verified live 2026-10-02 against iprskola: an invalid or expired
+    `/elearning/…` token is a plain HTTP 404 — `Requested file was not found on
+    this server!`, 44 bytes, no `content-disposition` — which the caller's status
+    check already rejects. The 200-with-HTML shape is what an unauthenticated
+    school *page* does instead: it redirects to `/login/` and answers HTTP 200
+    with ~47 kB of HTML, which would otherwise be written to disk as the
+    attachment. Every page and error response lacks a `content-disposition`
+    filename while every real attachment carries one, so that header is the
+    discriminator — a genuine `.html` attachment is let through.
+    """
+    body = getattr(response, "content", None) or b""
+    disposition = _hw_disposition(response)
+    if _HW_DISPOSITION_STAR.search(disposition) or _HW_DISPOSITION_PLAIN.search(disposition):
+        return  # the server named the file, so this is an attachment
+    if b"captcha" in body[:4096].lower():
+        raise RuntimeError(
+            f"{url} returned a captcha challenge page instead of the file. Wait a "
+            "few minutes, then re-run `login`/`login_all` and fetch a fresh "
+            "attachment URL."
+        )
+    if _hw_media_type(response) != "text/html":
+        return
+    final_path = urlparse(str(getattr(response, "url", "") or "")).path.rstrip("/")
+    if final_path.endswith("/login"):
+        raise RuntimeError(
+            f"{url} redirected to EduPage's login page instead of the file: the "
+            "school session has expired — re-run `login`/`login_all`, then fetch "
+            "a fresh attachment URL."
+        )
+    raise RuntimeError(
+        f"{url} returned an HTML page ({len(body)} bytes) instead of a file, so "
+        "nothing was saved. It is not an attachment link, or its URL has expired "
+        "— take the URL from `get_timeline` -> `additional_data.attachements` or "
+        "from `get_homework_material`."
+    )
+
 
 def _hw_base_url(subdomain=None):
     """(subdomain, base_url) for a school, using the same base-URL resolution as
@@ -1650,19 +1761,33 @@ def _hw_dedupe_path(path):
     return candidate
 
 
-def _hw_filename_from_response(response, fallback_url):
-    """Name the server suggests: RFC 5987 `filename*`, then `filename`, else the
-    URL path."""
+def _hw_repair_utf8_filename(name):
+    """Recover a UTF-8 `filename=` that arrived as latin-1 mojibake.
+
+    `requests` decodes response headers as latin-1, so the raw UTF-8 filename
+    EduPage puts in `Content-Disposition: …filename="…"` comes back mangled
+    ('ÄasovÃ½ harmonogram.docx', verified live 2026-10-02). Reinterpreting the
+    characters as UTF-8 is only right when those bytes really are UTF-8, so a
+    genuinely latin-1 name is returned untouched instead of being turned into
+    U+FFFD by `errors="replace"`; the same guard makes the repair a no-op on a
+    name that already decoded correctly.
+    """
     try:
-        disposition = response.headers.get("content-disposition") or ""
-    except Exception:  # noqa: BLE001 - a header-less fake response is fine
-        disposition = ""
+        return name.encode("latin-1").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return name
+
+
+def _hw_filename_from_response(response, fallback_url):
+    """Name the server suggests: RFC 5987 `filename*` (already percent-decoded
+    UTF-8), then `filename` (repaired from latin-1 mojibake), else the URL path."""
+    disposition = _hw_disposition(response)
     star = _HW_DISPOSITION_STAR.search(disposition)
     if star:
         return unquote(star.group(1).strip().strip('"'))
     plain = _HW_DISPOSITION_PLAIN.search(disposition)
     if plain:
-        return plain.group(1).strip()
+        return _hw_repair_utf8_filename(plain.group(1).strip())
     return urlparse(fallback_url).path.rsplit("/", 1)[-1] or "download"
 
 
@@ -1716,16 +1841,23 @@ def get_homework_material(superid: str, subdomain: Optional[str] = None) -> dict
 @_tool
 def download_homework_file(url: str, dest_dir: Optional[str] = None, filename: Optional[str] = None,
                            subdomain: Optional[str] = None) -> dict:
-    """Download one homework attachment to disk. Writes: creates a local file.
+    """Download one authenticated file from the school (usually a homework or
+    message attachment) to disk. Writes: creates a local file.
 
-    Takes an `url` from `get_homework_material`, fetches it through the school's
-    logged-in session and writes it into `dest_dir` (default: a `homework`
-    folder under the OS temp dir). An existing file is never overwritten — a
-    ' (1)', ' (2)', ... suffix is appended instead.
+    Fetches `url` through the school's logged-in session and writes the raw
+    response bytes into `dest_dir` (default: a `homework` folder under the OS
+    temp dir). An existing file is never overwritten — a ' (1)', ' (2)', ...
+    suffix is appended instead. Because the bytes go to disk untouched, this is
+    the only tool that returns a binary attachment intact; `custom_request`
+    refuses one.
 
     Args:
-        url: Absolute attachment URL exactly as returned by
-            `get_homework_material`; the request is authenticated with the
+        url: Absolute attachment URL, or a school-relative path such as
+            '/elearning/ruqjzfpv?z%3A…' — the exact form
+            `get_timeline(category='recent')` returns in
+            `additional_data.attachements` — resolved against the school origin.
+            Any authenticated file URL works, not just homework: message and
+            event attachments included. The request is authenticated with the
             school's session.
         dest_dir: Directory to save into, created when missing. Defaults to
             `<tempdir>/homework` (e.g. `.../AppData/Local/Temp/homework`).
@@ -1741,8 +1873,10 @@ def download_homework_file(url: str, dest_dir: Optional[str] = None, filename: O
     Notes:
         - The only tool in this server that writes to disk, and the only one
           excluded from the read-only e2e suite — call it only on request.
-        - Run `get_homework_material` first: it lists the attachment URLs, so
-          never guess or construct one.
+        - Verified live 2026-10-02: a bad or expired attachment token is a
+          plain HTTP 404, and a school page fetched without a session answers
+          HTTP 200 with the login page. Both raise instead of writing a file,
+          so a saved attachment is always real bytes.
         - The name comes from `content-disposition` when the server sends it,
           otherwise from the URL path.
         - Bounded by the library session's 5 s request timeout
@@ -1750,14 +1884,16 @@ def download_homework_file(url: str, dest_dir: Optional[str] = None, filename: O
     """
     def go():
         client = _require_client(subdomain)
-        resp = client.custom_request(url, "GET")
+        source_url = _hw_absolute_url(url, subdomain)
+        resp = client.custom_request(source_url, "GET")
         status = getattr(resp, "status_code", 0)
         if status != 200:
             raise RuntimeError(
-                f"Downloading {url} returned HTTP {status}. The link may have "
+                f"Downloading {source_url} returned HTTP {status}. The link may have "
                 "expired — re-run `get_homework_material` for a fresh URL."
             )
-        name = _hw_sanitize_filename(filename or _hw_filename_from_response(resp, url))
+        _hw_reject_html_page(resp, source_url)
+        name = _hw_sanitize_filename(filename or _hw_filename_from_response(resp, source_url))
         dest = Path(dest_dir) if dest_dir else Path(tempfile.gettempdir()) / "homework"
         dest.mkdir(parents=True, exist_ok=True)
         path = _hw_dedupe_path(dest / name)
@@ -1765,7 +1901,7 @@ def download_homework_file(url: str, dest_dir: Optional[str] = None, filename: O
             raise RuntimeError(f"Refusing to save outside '{dest}'.")
         body = resp.content or b""
         path.write_bytes(body)
-        return {"saved_to": str(path), "bytes": len(body), "source_url": url,
+        return {"saved_to": str(path), "bytes": len(body), "source_url": source_url,
                 "name": path.name}
 
     return _run(go, "download_homework_file")
@@ -2903,12 +3039,23 @@ def custom_request(url: str, method: str, data: Optional[str] = "", headers: Opt
         subdomain: School whose session to use (defaults to the active).
 
     Returns:
-        dict: {'status_code': int, 'text': body}.
+        dict: {'status_code': int, 'content_type': str, 'bytes': int,
+        'text': str, 'truncated': bool}. `bytes` is the raw body length and
+        `text` is it decoded.
 
     Notes:
         - Low-level escape hatch for endpoints not covered by the dedicated
           tools — prefer those when available. Parse the returned text
           yourself; fields are not pre-serialized.
+        - Text only. A binary body (an Office/PDF/image/video attachment) is
+          refused rather than returned as lossily-decoded `errors="replace"`
+          garbage; use `download_homework_file(url=…, subdomain=…)`, which
+          writes the raw bytes to disk and accepts any authenticated file URL.
+        - `text` is capped at 60000 characters so the cap is this tool's, not the MCP
+          client's silent one. EduPage's own pages ignore `Range`, so a
+          `truncated` text body cannot be paged through: narrow the request
+          instead (a more specific path or a dedicated tool), or save the whole
+          body with `download_homework_file`.
     """
     # Explicit null (sent by some clients) must mean "empty", since both are
     # forwarded verbatim to the upstream request call. Bound outside `go()` so
@@ -2919,16 +3066,22 @@ def custom_request(url: str, method: str, data: Optional[str] = "", headers: Opt
     def go():
         client = _require_client(subdomain)
         hdrs = json.loads(headers) if headers else {}
-        request_url = url
-        parsed = urlparse(request_url)
-        if not parsed.scheme:
-            sub = _resolve_subdomain(subdomain)
-            if not sub:
-                raise RuntimeError("Cannot build absolute URL without a resolved subdomain.")
-            path = request_url if request_url.startswith("/") else f"/{request_url}"
-            request_url = f"https://{sub}.edupage.org{path}"
+        request_url = _hw_absolute_url(url, subdomain)
         resp = client.custom_request(request_url, method, data, hdrs)
-        return {"status_code": resp.status_code, "text": resp.text}
+        body = resp.content or b""
+        content_type = _hw_media_type(resp)
+        if _hw_body_is_binary(content_type, body):
+            ctype = content_type or "unknown media type"
+            raise RuntimeError(
+                f"{request_url} returned a binary body ({ctype}, {len(body)} bytes), "
+                "which cannot be returned as text without corrupting it. Use "
+                "download_homework_file(url=…, subdomain=…) — it writes the raw "
+                "bytes to disk and works for any authenticated attachment URL."
+            )
+        text = resp.text
+        return {"status_code": resp.status_code, "content_type": content_type,
+                "bytes": len(body), "text": text[:_CUSTOM_TEXT_MAX],
+                "truncated": len(text) > _CUSTOM_TEXT_MAX}
 
     return _run(go, "custom_request")
 
