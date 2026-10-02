@@ -3,7 +3,7 @@
   "name": "io.github.oliverhruby/edupage-mcp",
   "title": "EduPage MCP Server",
   "description": "EduPage MCP: timetables, grades, homework, meals, messages, 2FA, multi-school, role-aware.",
-      "version": "0.5.4",
+      "version": "0.5.5",
   "websiteUrl": "https://github.com/oliverhruby/edupage-mcp",
   "repository": {
     "url": "https://github.com/oliverhruby/edupage-mcp",
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "edupage-mcp-full",
-  "version": "0.5.4",
+  "version": "0.5.5",
       "transport": {
         "type": "stdio"
       },
