@@ -27,22 +27,3 @@ CVE-2026-76642
 CVE-2026-78408
 CVE-2026-78409
 CVE-2026-78410
-
-# urllib3 2.7.0 is not a dependency of ours — it is the copy pip vendors for
-# itself. pip 26.2.1's vendor.txt records exactly "urllib3==2.7.0", and Trivy
-# reports vendored packages. Verified against the published image: the only
-# real urllib3 is 2.8.0 at
-# usr/local/lib/python3.11/site-packages/urllib3-2.8.0.dist-info, and there is
-# no urllib3-2.7.0 dist-info in any layer. The server's HTTP traffic goes
-# through requests -> that real 2.8.0; the vendored copy is only reachable by
-# running pip, which this image never does at runtime.
-#
-# Not fixable by upgrading pip: 26.2.1 is the latest release and vendors
-# urllib3 2.7.0. Our own floor is enforced in pyproject.toml (urllib3>=2.8.0).
-# A multi-stage build that strips pip would also clear it, but saves only a
-# few MB and complicates the Dockerfile, so it is not worth it.
-# https://avd.aquasec.com/nvd/cve-2026-97687
-# https://avd.aquasec.com/nvd/cve-2026-97689
-# Re-evaluate on the next pip release. Target removal: 2026-12-31.
-CVE-2026-97687
-CVE-2026-97689
