@@ -22,7 +22,7 @@ WRITE_TOOLS = {
     "sign_off_meal",
     "rate_meal",
     "custom_request",
-    "download_homework_file",
+    "download_attachment",
 }
 
 # Auth / local-only tools that are intentionally not polled.

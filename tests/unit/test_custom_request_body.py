@@ -140,7 +140,7 @@ def test_body_is_binary_only_probes_the_first_4k():
 
 
 # --------------------------------------------------------------------------
-# _hw_absolute_url — shared by custom_request and download_homework_file
+# _hw_absolute_url — shared by custom_request and download_attachment
 # --------------------------------------------------------------------------
 def test_absolute_url_passes_through_a_full_url():
     assert m._hw_absolute_url(f"{BASE}/data/sck1/priloha.pdf") == f"{BASE}/data/sck1/priloha.pdf"
@@ -241,7 +241,7 @@ def test_custom_request_refuses_a_binary_body_and_names_the_download_tool(client
     text = res["content"][0]["text"]
     assert "binary body" in text
     assert DOCX_CT in text
-    assert "download_homework_file" in text
+    assert "download_attachment" in text
     assert "Traceback" not in text
 
 
@@ -264,7 +264,7 @@ def test_custom_request_refuses_other_binary_media_types(client, content_type, c
     client.default = FakeResponse(content=content, headers={"content-type": content_type})
     res = m.custom_request(url="/elearning/ruqjzfpv?z%3Aabc", method="GET", subdomain=SUB)
     assert res["isError"] is True
-    assert "download_homework_file" in res["content"][0]["text"]
+    assert "download_attachment" in res["content"][0]["text"]
 
 
 def test_custom_request_truncates_a_large_text_body(client):
@@ -296,14 +296,14 @@ def test_custom_request_requires_a_logged_in_session():
 
 
 # --------------------------------------------------------------------------
-# download_homework_file — relative URL + error-page guards
+# download_attachment — relative URL + error-page guards
 # --------------------------------------------------------------------------
 def test_download_accepts_the_relative_url_from_get_timeline(client, tmp_path):
     key = "/elearning/ruqjzfpv?z%3A1KmpBrCkpSed5RnzpItvH%2F3pycQ1JzFWrKYOa6KaRDM%3D%3D"
     client.default = FakeResponse(
         content=b"PK\x03\x04\x14\x00", headers={"content-type": DOCX_CT,
                                                 "content-disposition": 'inline; filename="a.docx"'})
-    res = m.download_homework_file(url=key, dest_dir=str(tmp_path), subdomain=SUB)
+    res = m.download_attachment(url=key, dest_dir=str(tmp_path), subdomain=SUB)
     assert not res.get("isError")
     assert client.calls[0][0] == f"{BASE}{key}"
     assert Path(res["saved_to"]).name == "a.docx"
@@ -313,8 +313,8 @@ def test_download_accepts_the_relative_url_from_get_timeline(client, tmp_path):
 
 def test_download_accepts_a_relative_url_without_a_leading_slash(client, tmp_path):
     client.default = FakeResponse(content=b"x", headers={"content-type": "text/plain"})
-    res = m.download_homework_file(url="elearning/ruqjzfpv?z%3Aabc",
-                                   dest_dir=str(tmp_path), subdomain=SUB)
+    res = m.download_attachment(url="elearning/ruqjzfpv?z%3Aabc",
+                               dest_dir=str(tmp_path), subdomain=SUB)
     assert not res.get("isError")
     assert client.calls[0][0] == f"{BASE}/elearning/ruqjzfpv?z%3Aabc"
 
@@ -326,7 +326,7 @@ def test_download_does_not_write_an_html_page_served_with_200(client, tmp_path):
         content=b"<!DOCTYPE html><html><body>login</body></html>",
         headers={"content-type": "text/html; charset=utf-8"},
         url=f"{BASE}/login/")
-    res = m.download_homework_file(url="/timeline/", dest_dir=str(tmp_path), subdomain=SUB)
+    res = m.download_attachment(url="/timeline/", dest_dir=str(tmp_path), subdomain=SUB)
     assert res["isError"] is True
     assert "session has expired" in res["content"][0]["text"]
     assert list(tmp_path.iterdir()) == []
@@ -337,16 +337,16 @@ def test_download_does_not_write_an_html_page_served_with_404(client, tmp_path):
         status_code=404,
         content=b"Requested file was not found on this server!",
         headers={"content-type": "text/html; charset=UTF-8"})
-    res = m.download_homework_file(url="/elearning/ruqjzfpv?z%3Abad",
-                                   dest_dir=str(tmp_path), subdomain=SUB)
+    res = m.download_attachment(url="/elearning/ruqjzfpv?z%3Abad",
+                               dest_dir=str(tmp_path), subdomain=SUB)
     assert res["isError"] is True
     assert "HTTP 404" in res["content"][0]["text"]
     assert list(tmp_path.iterdir()) == []
 
 
 def test_download_still_requires_a_logged_in_session(tmp_path):
-    res = m.download_homework_file(url="/elearning/ruqjzfpv?z%3Aabc",
-                                   dest_dir=str(tmp_path), subdomain=SUB)
+    res = m.download_attachment(url="/elearning/ruqjzfpv?z%3Aabc",
+                               dest_dir=str(tmp_path), subdomain=SUB)
     assert res["isError"] is True
     assert "Not logged in" in res["content"][0]["text"]
     assert list(tmp_path.iterdir()) == []
@@ -355,8 +355,8 @@ def test_download_still_requires_a_logged_in_session(tmp_path):
 def test_download_needs_a_subdomain_only_for_a_relative_url(tmp_path):
     """An absolute URL needs no resolved subdomain, so the relative-URL
     resolution must not run first and mask the real 'Not logged in' error."""
-    res = m.download_homework_file(url=f"{BASE}/elearning/ruqjzfpv?z%3Aabc",
-                                   dest_dir=str(tmp_path), subdomain=SUB)
+    res = m.download_attachment(url=f"{BASE}/elearning/ruqjzfpv?z%3Aabc",
+                               dest_dir=str(tmp_path), subdomain=SUB)
     assert res["isError"] is True
     assert "Not logged in" in res["content"][0]["text"]
 
@@ -455,8 +455,8 @@ def test_download_saves_under_the_repaired_name(client, tmp_path):
         content=b"PK\x03\x04", headers={"content-type": DOCX_CT, "content-disposition":
                                         'inline; filename="%s"' % mojibake(
                                             "časový harmonogram - jesenné účelové cvičenie 2026.docx")})
-    res = m.download_homework_file(url="/elearning/ruqjzfpv?z%3Aabc",
-                                   dest_dir=str(tmp_path), subdomain=SUB)
+    res = m.download_attachment(url="/elearning/ruqjzfpv?z%3Aabc",
+                               dest_dir=str(tmp_path), subdomain=SUB)
     assert not res.get("isError")
     saved = Path(res["saved_to"])
     assert saved.name == "časový harmonogram - jesenné účelové cvičenie 2026.docx"
@@ -470,8 +470,8 @@ def test_repaired_name_still_cannot_escape_dest_dir(client, tmp_path):
     client.default = FakeResponse(
         content=b"x", headers={"content-type": DOCX_CT, "content-disposition":
                                'inline; filename="%s"' % mojibake("../../zlé/český?.pdf")})
-    res = m.download_homework_file(url="/elearning/ruqjzfpv?z%3Aabc",
-                                   dest_dir=str(tmp_path), subdomain=SUB)
+    res = m.download_attachment(url="/elearning/ruqjzfpv?z%3Aabc",
+                               dest_dir=str(tmp_path), subdomain=SUB)
     assert not res.get("isError")
     saved = Path(res["saved_to"])
     assert saved.parent == tmp_path

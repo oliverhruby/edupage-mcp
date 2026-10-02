@@ -56,7 +56,7 @@ to a network, and prefer `stdio` where the client supports it.
 **`EDUPAGE_SUBDOMAINS` is a strict allowlist.** When set, logins to any
 other school are refused. Leave it unset only for a single-school account.
 
-**`custom_request` and `download_homework_file` can issue arbitrary
+**`custom_request` and `download_attachment` can issue arbitrary
 requests** to the school domain using your session — that is their purpose.
 The former accepts any EduPage path, so a hostile prompt could induce a
 request you did not intend. There is deliberately no host allowlist, because

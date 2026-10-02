@@ -1,5 +1,5 @@
 """Offline tests for the homework-material tools (get_homework_material,
-download_homework_file).
+download_attachment).
 
 These run with NO network and NO credentials. `edupage-api` has no
 homework/material reader (AGENTS.md rule-1 exception), so the wrapper parses
@@ -272,7 +272,7 @@ def test_dedupe_path_appends_incrementing_suffix(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# download_homework_file tool
+# download_attachment tool
 # --------------------------------------------------------------------------
 def _download_client(content=b"PDF", headers=None, status_code=200):
     return FakeClient(default=FakeResponse(content=content, headers=headers,
@@ -282,9 +282,9 @@ def _download_client(content=b"PDF", headers=None, status_code=200):
 def test_download_writes_file_into_dest_dir(client, tmp_path):
     client.responses = {"https://x.edupage.org/f/priloha.pdf": FakeResponse(
         content=b"%PDF-1.4", headers={"content-disposition": 'attachment; filename="učebnice.pdf"'})}
-    res = m.download_homework_file(url="https://x.edupage.org/f/priloha.pdf",
-                                   dest_dir=str(tmp_path / "domac"),
-                                   subdomain=SUB)
+    res = m.download_attachment(url="https://x.edupage.org/f/priloha.pdf",
+                               dest_dir=str(tmp_path / "domac"),
+                               subdomain=SUB)
     assert not res.get("isError")
     saved = Path(res["saved_to"])
     assert saved == tmp_path / "domac" / "učebnice.pdf"  # directory was created
@@ -296,10 +296,10 @@ def test_download_writes_file_into_dest_dir(client, tmp_path):
 
 def test_download_never_overwrites(client, tmp_path):
     client.default = FakeResponse(content=b"new", headers={"content-disposition": "attachment; filename=a.pdf"})
-    first = m.download_homework_file(url="https://x.edupage.org/f/a.pdf",
-                                     dest_dir=str(tmp_path), subdomain=SUB)
-    second = m.download_homework_file(url="https://x.edupage.org/f/a.pdf",
-                                      dest_dir=str(tmp_path), subdomain=SUB)
+    first = m.download_attachment(url="https://x.edupage.org/f/a.pdf",
+                                 dest_dir=str(tmp_path), subdomain=SUB)
+    second = m.download_attachment(url="https://x.edupage.org/f/a.pdf",
+                                  dest_dir=str(tmp_path), subdomain=SUB)
     assert Path(first["saved_to"]).name == "a.pdf"
     assert Path(second["saved_to"]).name == "a (1).pdf"
     assert Path(first["saved_to"]).read_bytes() == b"new"
@@ -307,9 +307,9 @@ def test_download_never_overwrites(client, tmp_path):
 
 
 def test_download_filename_cannot_escape_dest_dir(client, tmp_path):
-    res = m.download_homework_file(url="https://x.edupage.org/f/a.pdf",
-                                   dest_dir=str(tmp_path), filename="../../evil.pdf",
-                                   subdomain=SUB)
+    res = m.download_attachment(url="https://x.edupage.org/f/a.pdf",
+                               dest_dir=str(tmp_path), filename="../../evil.pdf",
+                               subdomain=SUB)
     saved = Path(res["saved_to"])
     assert saved.parent == tmp_path
     assert saved.name == "evil.pdf"
@@ -321,8 +321,8 @@ def test_download_defaults_to_homework_folder_in_tempdir(monkeypatch, client):
     monkeypatch.setattr(m.tempfile, "gettempdir", lambda: str(fake_temp))
     client.default = FakeResponse(content=b"x", headers={"content-disposition": "attachment; filename=hw.txt"})
     try:
-        res = m.download_homework_file(url="https://x.edupage.org/f/hw.txt",
-                                       subdomain=SUB)
+        res = m.download_attachment(url="https://x.edupage.org/f/hw.txt",
+                                   subdomain=SUB)
         assert not res.get("isError")
         assert Path(res["saved_to"]) == fake_temp / "homework" / "hw.txt"
     finally:
@@ -333,15 +333,15 @@ def test_download_defaults_to_homework_folder_in_tempdir(monkeypatch, client):
 
 def test_download_surfaces_http_error(client, tmp_path):
     client.default = FakeResponse(status_code=403, content=b"")
-    res = m.download_homework_file(url="https://x.edupage.org/f/a.pdf",
-                                   dest_dir=str(tmp_path), subdomain=SUB)
+    res = m.download_attachment(url="https://x.edupage.org/f/a.pdf",
+                               dest_dir=str(tmp_path), subdomain=SUB)
     assert res["isError"] is True
     assert "HTTP 403" in res["content"][0]["text"]
     assert list(tmp_path.iterdir()) == []
 
 
 def test_download_requires_a_logged_in_session(tmp_path):
-    res = m.download_homework_file(url="https://x.edupage.org/f/a.pdf",
-                                   dest_dir=str(tmp_path), subdomain=SUB)
+    res = m.download_attachment(url="https://x.edupage.org/f/a.pdf",
+                               dest_dir=str(tmp_path), subdomain=SUB)
     assert res["isError"] is True
     assert "Not logged in" in res["content"][0]["text"]

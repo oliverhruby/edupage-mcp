@@ -127,7 +127,7 @@ A single stdio MCP server exposing **31 tools** (published on PyPI as
 - **Homework** — `get_timeline(category='homework')` to list assignments
   (ids in `additional_data.superid`), `get_homework_material` to read one
   assignment's **body text**, dates and attachment list (the notification alone
-  only carries the title and due date), `download_homework_file` to save one
+  only carries the title and due date), `download_attachment` to save one
   attachment to disk
 - **Substitutions** — `get_timetable_changes`, `get_missing_teachers`
 - **Meals** — `get_meals`, `choose_meal`, `sign_off_meal`, `rate_meal`
@@ -466,7 +466,7 @@ fully automatic.
 | `get_grades` | Grades, optionally by year & term |  |
 | `get_timeline` | Timeline notifications, one `category=` at a time: `recent`, `history` (since `date_from`), `homework`, `assignments`, `absences`, `events`, `news` (formerly `get_notifications`, `get_notification_history`, `get_homework`, `get_assignments`, `get_absences`, `get_upcoming_events`, `get_news`) |  |
 | `get_homework_material` | Full body text, dates and attachment list of one assignment, by `superid` from `get_timeline(category='homework')` → `additional_data.superid` |  |
-| `download_homework_file` | Download any authenticated file URL to disk — absolute, or the relative `/elearning/…` key from `get_timeline` (default `<tempdir>/homework`, never overwrites) | ✅ disk |
+| `download_attachment` | Download any authenticated attachment to disk — absolute URL, or the relative `/elearning/…` key from `get_timeline`; refuses school/login pages (default `<tempdir>/homework`, never overwrites) | ✅ disk |
 | `get_timetable_changes` | Substitutions / timetable changes for a date |  |
 | `get_missing_teachers` | Teachers missing on a date |  |
 | `get_day_summary` | One-call daily report (timetable, substitutions, teachers, grades, meals incl. breakfast/dinner when published, homework, assignments, absences, news, events, notifications) for a date; student by name/id (role-aware). **Discovery-first**: parent without `name`/`student_id` returns a lightweight per-school student index (`mode:"discovery"`); pass `full=True` to build full reports for every child. Bundles OpenCode skill `school-day-summary` for human-readable output. |  |
@@ -483,7 +483,7 @@ fully automatic.
 | `send_message` | Send a message to a user | ✅ |
 | `switch_to_student` | Switch to a student account by id or name (parent only) | ✅ session |
 | `switch_to_parent` | Switch back to the parent account | ✅ session |
-| `custom_request` | Raw text request through the active session (GET/POST); refuses binary bodies and points at `download_homework_file` | ✅ |
+| `custom_request` | Raw text request through the active session (GET/POST); refuses binary bodies and points at `download_attachment` | ✅ |
 
 ---
 
@@ -491,13 +491,13 @@ fully automatic.
 
 - Most tools are **read-only**. The ones marked **Writes? ✅** mutate EduPage
   state (sent messages, ordered meals, switched accounts). Use them with care.
-- `download_homework_file` is the one tool that writes to **local disk**: it saves
+- `download_attachment` is the one tool that writes to **local disk**: it saves
   into `dest_dir` (default `<tempdir>/homework`), takes the name from the
   server's `content-disposition` when present, and appends ` (1)`, ` (2)`, ...
   rather than overwriting anything. An HTML login/error page is refused instead
   of being written out as an attachment.
 - `custom_request` returns **text only**: a binary body is refused with a
-  pointer to `download_homework_file`, and a text body over 60000 characters
+  pointer to `download_attachment`, and a text body over 60000 characters
   comes back truncated with an explicit `truncated: true`.
 - `get_timeline` categories `homework`, `assignments`, `absences`, `events` and
   `news` derive their data from the **timeline notifications** — if the school

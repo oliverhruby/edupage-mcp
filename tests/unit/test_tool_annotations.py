@@ -130,7 +130,7 @@ def test_network_tools_are_open_world():
 def test_known_risky_tools_are_destructive():
     """Tools that remove, overwrite or duplicate state are flagged."""
     for n in ("rate_meal", "sign_off_meal", "send_message",
-              "download_homework_file", "custom_request"):
+              "download_attachment", "custom_request"):
         assert TOOL_ANNOTATIONS[n]["destructiveHint"] is True, n
 
 
@@ -146,10 +146,10 @@ def test_login_is_idempotent():
         assert TOOL_ANNOTATIONS[n]["idempotentHint"] is True, n
 
 
-def test_new_homework_tools_classified():
+def test_material_and_download_tools_classified():
     assert TOOL_ANNOTATIONS["get_homework_material"]["readOnlyHint"] is True
-    assert TOOL_ANNOTATIONS["download_homework_file"]["readOnlyHint"] is False
-    assert TOOL_ANNOTATIONS["download_homework_file"]["destructiveHint"] is True
+    assert TOOL_ANNOTATIONS["download_attachment"]["readOnlyHint"] is False
+    assert TOOL_ANNOTATIONS["download_attachment"]["destructiveHint"] is True
 
 
 def test_annotations_reach_the_wire():

@@ -70,7 +70,7 @@ process, CI/CD workflow reference, Conventional Commits — lives in
    message must not contain identities.
 
 9. **Deliberate rule-1 exception: the material-player parser.**
-   `get_homework_material` and `download_homework_file` parse the
+   `get_homework_material` and `download_attachment` parse the
    `.etestPlayer(...)` payload of
    `/elearning/?cmd=MaterialPlayer&superid=…` **locally**, because
    `edupage-api` ships no homework/material reader (only the `homework` /

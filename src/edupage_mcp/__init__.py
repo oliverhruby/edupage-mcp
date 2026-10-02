@@ -8,7 +8,7 @@ rosters (students/teachers/classes/classrooms/subjects), messages, role-aware
 student switching, multi-school auto-discovery, and custom requests.
 
 Careful: login/send_message/switch_to_student/meal actions mutate Edupage state,
-and `download_homework_file` writes a file to local disk. All `get_*` tools are
+and `download_attachment` writes a file to local disk. All `get_*` tools are
 read-only.
 """
 
@@ -613,7 +613,7 @@ TOOL_ANNOTATIONS = {
     # --- filesystem --------------------------------------------------------
     # Creates a local file. `_hw_dedupe_path` never clobbers an existing
     # download, so a retry lands beside it rather than replacing it.
-    "download_homework_file": _WRITE_DESTRUCTIVE,
+    "download_attachment": _WRITE_DESTRUCTIVE,
     # Raw passthrough: capability depends entirely on the endpoint called.
     "custom_request": _WRITE_NON_IDEMPOTENT,
 }
@@ -1810,7 +1810,7 @@ def get_homework_material(superid: str, subdomain: Optional[str] = None) -> dict
         dict: {'subdomain', 'superid', 'title', 'details', 'date_from',
         'date_to', 'content', 'attachments'}. Each attachment is
         {'name', 'url'} with an absolute URL — hand `url` to
-        `download_homework_file` to save it.
+        `download_attachment` to save it.
 
     Notes:
         - Discover ids first: `get_timeline(category='homework')` (or
@@ -1839,26 +1839,28 @@ def get_homework_material(superid: str, subdomain: Optional[str] = None) -> dict
 
 
 @_tool
-def download_homework_file(url: str, dest_dir: Optional[str] = None, filename: Optional[str] = None,
-                           subdomain: Optional[str] = None) -> dict:
-    """Download one authenticated file from the school (usually a homework or
-    message attachment) to disk. Writes: creates a local file.
+def download_attachment(url: str, dest_dir: Optional[str] = None, filename: Optional[str] = None,
+                        subdomain: Optional[str] = None) -> dict:
+    """Download one attachment from the school to disk. Writes: creates a local
+    file.
 
-    Fetches `url` through the school's logged-in session and writes the raw
-    response bytes into `dest_dir` (default: a `homework` folder under the OS
-    temp dir). An existing file is never overwritten — a ' (1)', ' (2)', ...
-    suffix is appended instead. Because the bytes go to disk untouched, this is
-    the only tool that returns a binary attachment intact; `custom_request`
-    refuses one.
+    Saves any authenticated attachment — homework material, message and event
+    attachments alike, which is what `get_timeline` puts in
+    `additional_data.attachements` and `get_homework_material` lists — as the
+    raw response bytes, never overwriting (a ' (1)', ' (2)', ... suffix is
+    appended instead). School pages are not attachments: an HTML or login page
+    is refused rather than written out. Because the bytes go to disk untouched,
+    this is the only tool that returns a binary attachment intact;
+    `custom_request` refuses one.
 
     Args:
         url: Absolute attachment URL, or a school-relative path such as
             '/elearning/ruqjzfpv?z%3A…' — the exact form
             `get_timeline(category='recent')` returns in
             `additional_data.attachements` — resolved against the school origin.
-            Any authenticated file URL works, not just homework: message and
-            event attachments included. The request is authenticated with the
-            school's session.
+            Any authenticated attachment URL works, not just homework: message
+            and event attachments included. The request is authenticated with
+            the school's session.
         dest_dir: Directory to save into, created when missing. Defaults to
             `<tempdir>/homework` (e.g. `.../AppData/Local/Temp/homework`).
         filename: Save under this name instead of the server-suggested one.
@@ -1904,7 +1906,7 @@ def download_homework_file(url: str, dest_dir: Optional[str] = None, filename: O
         return {"saved_to": str(path), "bytes": len(body), "source_url": source_url,
                 "name": path.name}
 
-    return _run(go, "download_homework_file")
+    return _run(go, "download_attachment")
 
 
 # --------------------------------------------------------------------------
@@ -3049,13 +3051,14 @@ def custom_request(url: str, method: str, data: Optional[str] = "", headers: Opt
           yourself; fields are not pre-serialized.
         - Text only. A binary body (an Office/PDF/image/video attachment) is
           refused rather than returned as lossily-decoded `errors="replace"`
-          garbage; use `download_homework_file(url=…, subdomain=…)`, which
-          writes the raw bytes to disk and accepts any authenticated file URL.
+          garbage; use `download_attachment(url=…, subdomain=…)`, which
+          writes the raw bytes to disk and accepts any authenticated attachment
+          URL.
         - `text` is capped at 60000 characters so the cap is this tool's, not the MCP
           client's silent one. EduPage's own pages ignore `Range`, so a
           `truncated` text body cannot be paged through: narrow the request
           instead (a more specific path or a dedicated tool), or save the whole
-          body with `download_homework_file`.
+          body with `download_attachment`.
     """
     # Explicit null (sent by some clients) must mean "empty", since both are
     # forwarded verbatim to the upstream request call. Bound outside `go()` so
@@ -3075,7 +3078,7 @@ def custom_request(url: str, method: str, data: Optional[str] = "", headers: Opt
             raise RuntimeError(
                 f"{request_url} returned a binary body ({ctype}, {len(body)} bytes), "
                 "which cannot be returned as text without corrupting it. Use "
-                "download_homework_file(url=…, subdomain=…) — it writes the raw "
+                "download_attachment(url=…, subdomain=…) — it writes the raw "
                 "bytes to disk and works for any authenticated attachment URL."
             )
         text = resp.text

@@ -125,7 +125,7 @@ REQUIRED_VALUES = {
     "choose_meal": {"date_str": "2026-01-01", "meal_type": "lunch", "number": 1},
     "sign_off_meal": {"date_str": "2026-01-01", "meal_type": "lunch"},
     "send_message": {"recipient_id": "Teacher1", "body": "hi"},
-    "download_homework_file": {"url": "https://example.invalid/y"},
+    "download_attachment": {"url": "https://example.invalid/y"},
     "get_homework_material": {"superid": "1"},
 }
 
