@@ -75,10 +75,12 @@ jobs:
         run: mcp-publisher login github-oidc
 
       - name: Wait for the package to appear on PyPI
-        # The registry validates server.json against the live PyPI index, but
-        # this workflow runs in parallel with the PyPI publish on the same tag.
-        # The registry's own error for this is a 404 on the version, so wait it
-        # out instead of failing the release and needing a manual re-run.
+        # A pre-flight probe, so the common case does not log a failed publish.
+        # It is deliberately not trusted on its own: PyPI propagates to its own
+        # JSON API and simple index at different speeds, and the registry reads
+        # from its own egress with its own cache. In v0.5.5 the probe passed and
+        # the publish still 404'd a second later. The retry loop below is what
+        # actually makes this reliable; this step only avoids the noise.
         env:
           PACKAGE: edupage-mcp-full
           VERSION: ${{ steps.version.outputs.value }}
@@ -95,4 +97,20 @@ jobs:
           exit 1
 
       - name: Publish to MCP Registry
-        run: mcp-publisher publish server.json
+        # Retry rather than probe-and-hope. The registry 404s while the new
+        # version is still propagating on its side, and no client-side check
+        # can observe that delay -- PyPI's JSON API, simple index and the
+        # registry's own view each settle at different times. Retrying the
+        # actual publish is the only signal that matters, and each failed
+        # attempt is a 400 rather than a partial write, so retrying is safe.
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if mcp-publisher publish server.json; then
+              echo "published on attempt ${attempt}"
+              exit 0
+            fi
+            echo "::warning::publish attempt ${attempt} failed; retrying in 30s"
+            sleep 30
+          done
+          echo "::error::could not publish to the MCP registry after 6 attempts"
+          exit 1
