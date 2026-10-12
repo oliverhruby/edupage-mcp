@@ -1,6 +1,6 @@
 {
   "name": "edupage",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "EduPage school data (timetables, grades, homework, meals, messages) plus a school-day-summary agent skill.",
   "author": {
     "name": "Oliver Hruby",
