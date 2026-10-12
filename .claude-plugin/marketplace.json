@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "edupage-plugins",
+  "description": "The EduPage MCP server and its school-day-summary agent skill, installable as a Claude Code plugin.",
+  "owner": {
+    "name": "Oliver Hruby",
+    "url": "https://github.com/oliverhruby"
+  },
+  "plugins": [
+    {
+      "name": "edupage",
+      "source": "./plugin",
+      "description": "EduPage school data (timetables, grades, homework, meals, messages) plus a school-day-summary agent skill.",
+      "category": "education",
+      "tags": [
+        "mcp",
+        "edupage",
+        "school",
+        "timetable",
+        "grades"
+      ]
+    }
+  ]
+}

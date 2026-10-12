@@ -1,0 +1,53 @@
+{
+  "name": "edupage",
+  "version": "0.6.1",
+  "description": "EduPage school data (timetables, grades, homework, meals, messages) plus a school-day-summary agent skill.",
+  "author": {
+    "name": "Oliver Hruby",
+    "url": "https://github.com/oliverhruby"
+  },
+  "homepage": "https://github.com/oliverhruby/edupage-mcp",
+  "repository": "https://github.com/oliverhruby/edupage-mcp",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "edupage",
+    "education",
+    "school",
+    "timetable",
+    "grades",
+    "homework",
+    "skills"
+  ],
+  "mcpServers": {
+    "edupage": {
+      "command": "uvx",
+      "args": ["edupage-mcp-full"],
+      "env": {
+        "EDUPAGE_USERNAME": "${user_config.edupage_username}",
+        "EDUPAGE_PASSWORD": "${user_config.edupage_password}",
+        "EDUPAGE_SUBDOMAINS": "${user_config.edupage_subdomains}"
+      }
+    }
+  },
+  "userConfig": {
+    "edupage_username": {
+      "type": "string",
+      "title": "EduPage username",
+      "description": "Your EduPage login (parent account). Also accepted as the EDUPAGE_USERNAME environment variable.",
+      "required": true
+    },
+    "edupage_password": {
+      "type": "string",
+      "title": "EduPage password",
+      "description": "Your EduPage password. Stored in the platform's secure credential store, never in settings.json. Also accepted as the EDUPAGE_PASSWORD environment variable.",
+      "required": true,
+      "sensitive": true
+    },
+    "edupage_subdomains": {
+      "type": "string",
+      "title": "School subdomains (optional)",
+      "description": "Comma-separated EduPage school subdomains, e.g. myschool,myschool-gym. Leave empty to let the server auto-discover. Also accepted as the EDUPAGE_SUBDOMAINS environment variable."
+    }
+  }
+}

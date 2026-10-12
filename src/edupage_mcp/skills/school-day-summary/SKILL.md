@@ -1,6 +1,10 @@
 ---
 name: school-day-summary
 description: Build a "what happened at school that day" report for a child/student for yesterday, today, or an upcoming date — combining timetable, substitutions, missing teachers, meals, grades received, homework, tests/exams, absences, news, events, and timeline notifications into one summary. Use when the user asks for a daily summary, "what happened yesterday", "what is coming tomorrow", "how was school", or a combined per-day overview. Pairs with the `get_day_summary` tool from the edupage-mcp-full server.
+compatibility: Requires the edupage MCP server (get_day_summary tool).
+metadata:
+  mcp-server: edupage
+  mcp-package: edupage-mcp-full
 ---
 
 # School day summary

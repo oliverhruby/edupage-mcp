@@ -1,0 +1,23 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "edupage",
+  "version": "0.6.1",
+  "description": "EduPage school data (timetables, grades, homework, meals, messages) plus a school-day-summary agent skill.",
+  "author": {
+    "name": "Oliver Hruby",
+    "url": "https://github.com/oliverhruby"
+  },
+  "homepage": "https://github.com/oliverhruby/edupage-mcp",
+  "repository": "https://github.com/oliverhruby/edupage-mcp",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "edupage",
+    "education",
+    "school",
+    "timetable",
+    "grades",
+    "homework",
+    "skills"
+  ]
+}
