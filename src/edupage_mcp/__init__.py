@@ -41,28 +41,8 @@ from edupage_api.people import EduAccount, EduParent, EduStudent, EduStudentSkel
 from edupage_api.ringing import RingingTime, RingingType
 from edupage_api.subjects import Subject
 from edupage_api.substitution import Action, TimetableChange
-from edupage_api.timeline import TimelineEvents as _TimelineEvents
 from edupage_api.timeline import EventType, TimelineEvent
 from edupage_api.timetables import Lesson, Timetable
-
-# ---------------------------------------------------------------------------
-# Local workaround for an upstream edupage-api bug (master as of 0.12.5):
-# get_notifications_history() passes data["timelineUserProps"] straight to
-# __parse_items, but for some schools (e.g. iprskola) that field arrives as a
-# JSON array ([]) instead of a dict, so __parse_items crashes with
-# "'list' object has no attribute 'get'". Coerce any non-dict user_props to {}
-# at this boundary. Revisit once upstream normalizes this shape itself.
-# ---------------------------------------------------------------------------
-_UPSTREAM_PARSE_ITEMS = getattr(_TimelineEvents, "_TimelineEvents__parse_items")
-
-
-def _parse_items_coerce_user_props(self, timeline_items, user_props=None):
-    if not isinstance(user_props, dict):
-        user_props = {}
-    return _UPSTREAM_PARSE_ITEMS(self, timeline_items, user_props)
-
-
-_TimelineEvents._TimelineEvents__parse_items = _parse_items_coerce_user_props
 
 try:
     from mcp.server.fastmcp import FastMCP
