@@ -10,18 +10,27 @@ student switching, multi-school auto-discovery, and custom requests.
 Careful: login/send_message/switch_to_student/meal actions mutate Edupage state,
 and `download_attachment` writes a file to local disk. All `get_*` tools are
 read-only.
+
+`main()` starts the MCP server. With no arguments that stays exactly as it has
+always been (stdio/HTTP, Docker ENTRYPOINT `python -m edupage_mcp`); when its
+first argument names a known CLI subcommand (`install-skill`) it runs that
+one-shot local utility instead and never reaches the server.
 """
 
+import argparse
 import builtins
 import datetime as _dt
 import html
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import time
 import unicodedata
+from contextlib import contextmanager
+from importlib import resources as _resources
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -3107,7 +3116,172 @@ def custom_request(url: str, method: str, data: Optional[str] = "", headers: Opt
 
 
 # --------------------------------------------------------------------------
+# CLI: install-skill
+#
+# A console-script subcommand of the same entry point as the MCP server
+# (`edupage-mcp-full` -> `main`, Docker ENTRYPOINT -> `python -m edupage_mcp`).
+# Subcommand dispatch happens in `main()` on `sys.argv[1]` BEFORE anything
+# server-related, so the zero-argument server start is untouched and argparse
+# never runs on the path MCP clients depend on.
+# --------------------------------------------------------------------------
+_SKILL_NAME = "school-day-summary"
+
+# `skills/school-day-summary/SKILL.md` is declared in pyproject.toml
+# ([tool.setuptools.package-data]); importlib.resources resolves it identically
+# for a wheel, an installed sdist, and an editable/source checkout.
+_SKILL_PACKAGE_PATH = ("skills", "school-day-summary", "SKILL.md")
+
+# Agent home directories, relative to Path.home() (never a hardcoded "~").
+# `agents` is the cross-vendor location: Copilot, Codex, Cursor and opencode
+# all honour ~/.agents/skills/, so it is a first-class target, not a fallback.
+_AGENT_SKILL_DIRS = {
+    "opencode": Path(".config") / "opencode" / "skills",
+    "copilot": Path(".copilot") / "skills",
+    "claude": Path(".claude") / "skills",
+    "agents": Path(".agents") / "skills",
+}
+_AGENT_ORDER = ("opencode", "copilot", "claude", "agents")
+_AGENT_CHOICES = (*_AGENT_ORDER, "all")
+
+# Subcommands recognised on argv[1]; anything else falls through to the server.
+_CLI_SUBCOMMANDS = frozenset({"install-skill"})
+
+
+def _skill_resource():
+    """The bundled SKILL.md as a Traversable.
+
+    `files()` is anchored on the installed package, so this is correct for a
+    wheel, an installed sdist, and an editable checkout alike - unlike
+    `Path(__file__).parent`, which only works for the last two.
+    """
+    return _resources.files("edupage_mcp").joinpath(*_SKILL_PACKAGE_PATH)
+
+
+@contextmanager
+def _skill_source_path():
+    """The bundled SKILL.md as a real filesystem `Path` (matters for zipped
+    installs, where the package directory is not a plain directory)."""
+    with _resources.as_file(_skill_resource()) as path:
+        yield path
+
+
+def _agent_skills_dir(agent: str) -> Path:
+    """`~/.config/opencode/skills/`, `~/.copilot/skills/`, ... for `agent`."""
+    return Path.home() / _AGENT_SKILL_DIRS[agent]
+
+
+def _agent_is_installed(agent: str) -> bool:
+    """True when the agent's home directory exists (e.g. `~/.copilot/`).
+
+    Detection is on the agent home, not on `.../skills/`: a configured agent
+    that has never installed a skill still has no skills directory, and missing
+    that we would silently install nothing.
+    """
+    return _agent_skills_dir(agent).parent.is_dir()
+
+
+def _install_skill_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="edupage-mcp-full install-skill",
+        description="Copy the bundled '%s' agent skill into a coding "
+                    "agent's skills directory." % _SKILL_NAME,
+    )
+    parser.add_argument(
+        "--agent", choices=_AGENT_CHOICES,
+        help="install into this agent only (default: every agent directory "
+             "that already exists; 'all' forces all four, creating the "
+             "missing ones)",
+    )
+    parser.add_argument(
+        "--print", dest="print_only", action="store_true",
+        help="print the resolved SKILL.md source path and exit; writes nothing",
+    )
+    parser.add_argument(
+        "--dry-run", dest="dry_run", action="store_true",
+        help="report what would be written without writing anything",
+    )
+    parser.add_argument(
+        "--force", action="store_true",
+        help="overwrite an existing SKILL.md that differs (default: refuse "
+             "and report, so a locally edited skill is never clobbered)",
+    )
+    return parser
+
+
+def _install_skill_targets(agent):
+    """The agent names to act on for `--agent`."""
+    if agent == "all":
+        return list(_AGENT_ORDER)
+    if agent:
+        return [agent]
+    # Auto mode: only clients actually set up on this machine.
+    return [name for name in _AGENT_ORDER if _agent_is_installed(name)]
+
+
+def _install_skill_one(agent: str, source: Path, *, dry_run: bool, force: bool) -> str:
+    """Copy SKILL.md into one agent's skills directory. Returns a report line."""
+    target = _agent_skills_dir(agent) / _SKILL_NAME / "SKILL.md"
+    if target.is_file() and target.read_bytes() == source.read_bytes():
+        return "skipped (identical) -> %s" % target
+    if target.exists() and not force:
+        return "skipped (exists, differs, use --force) -> %s" % target
+    if dry_run:
+        return "%s -> %s" % (
+            "would overwrite" if target.exists() else "would install", target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, target)
+    return "installed -> %s" % target
+
+
+def _cli_install_skill(argv) -> int:
+    """`edupage-mcp-full install-skill [...]`. Returns a process exit code."""
+    args = _install_skill_parser().parse_args(list(argv))
+    try:
+        with _skill_source_path() as source:
+            if not source.is_file():
+                raise FileNotFoundError(
+                    "the bundled skill is missing from the installed package "
+                    "(%s) - reinstall edupage-mcp-full" % _SKILL_NAME)
+            if args.print_only:
+                print(str(source))
+                return 0
+            targets = _install_skill_targets(args.agent)
+            if not targets:
+                sys.stderr.write(
+                    "install-skill: no agent directory found (looked for %s). "
+                    "Pass --agent {%s}.\n" % (
+                        ", ".join(str(_agent_skills_dir(a).parent) for a in _AGENT_ORDER),
+                        ",".join(_AGENT_CHOICES),
+                    )
+                )
+                return 1
+            for agent in targets:
+                print(_install_skill_one(
+                    agent, source, dry_run=args.dry_run, force=args.force))
+            return 0
+    except Exception as exc:  # noqa: BLE001
+        sys.stderr.write("install-skill failed: %s: %s\n" % (type(exc).__name__, exc))
+        return 1
+
+
+def _dispatch_cli(argv) -> Optional[int]:
+    """Exit code when `argv` names a CLI subcommand, None to start the server.
+
+    Returning None is what keeps the no-argument contract intact: the caller
+    falls through to the untouched server-start path.
+    """
+    if argv and argv[0] in _CLI_SUBCOMMANDS:
+        if argv[0] == "install-skill":
+            return _cli_install_skill(argv[1:])
+        raise SystemExit("unknown subcommand: %s" % argv[0])
+    return None
+
+
+# --------------------------------------------------------------------------
 def main():
+    exit_code = _dispatch_cli(sys.argv[1:])
+    if exit_code is not None:
+        raise SystemExit(exit_code)
     if server is None:
         raise SystemExit("The 'mcp' python package is not installed.")
     if _MCP_PORT_ERROR:

@@ -34,6 +34,43 @@ jobs:
       - name: Run unit test suite
         run: python -m pytest tests/unit -q --no-header
 
+      # The agent skill (skills/school-day-summary/SKILL.md) reaches users only
+      # as package-data in a built distribution - nothing imports it and no
+      # server code path touches it, so a pyproject/MANIFEST edit could drop it
+      # silently. Assert it against real build artifacts, not against the
+      # source tree the unit suite above reads.
+      - name: Build distributions and assert the agent skill ships
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+          python - <<'PY'
+          import pathlib
+          import tarfile
+          import zipfile
+
+          SKILL = "edupage_mcp/skills/school-day-summary/SKILL.md"
+          dist = pathlib.Path("dist")
+          wheels = sorted(dist.glob("*.whl"))
+          sdists = sorted(dist.glob("*.tar.gz"))
+          assert wheels, f"no wheel built in {dist.resolve()}"
+          assert sdists, f"no sdist built in {dist.resolve()}"
+
+          with zipfile.ZipFile(wheels[-1]) as zf:
+              assert SKILL in zf.namelist(), (
+                  f"{SKILL} is missing from {wheels[-1].name}; check "
+                  "[tool.setuptools.package-data] in pyproject.toml"
+              )
+              assert zf.read(SKILL).strip(), f"{SKILL} is empty in the wheel"
+          print(f"wheel {wheels[-1].name}: {SKILL} present")
+
+          with tarfile.open(sdists[-1]) as tf:
+              sdist_names = tf.getnames()
+          assert any(n.endswith(SKILL) for n in sdist_names), (
+              f"{SKILL} is missing from {sdists[-1].name}"
+          )
+          print(f"sdist {sdists[-1].name}: {SKILL} present")
+          PY
+
   docker-mcp-smoke:
     runs-on: ubuntu-latest
     steps:

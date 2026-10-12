@@ -50,6 +50,41 @@ jobs:
       - name: Build sdist + wheel
         run: python -m build
 
+      # HARD GATE, deliberately before the publish step: package-data is the
+      # only thing that puts skills/school-day-summary/SKILL.md into the wheel,
+      # and a bad pyproject/MANIFEST edit drops it silently. The unit suite
+      # cannot catch it (it reads the source tree) and quality-gates.yml only
+      # runs on pull requests. Nothing may reach PyPI without the skill.
+      - name: Assert agent skill is in the built distributions
+        run: |
+          python - <<'PY'
+          import pathlib
+          import tarfile
+          import zipfile
+
+          SKILL = "edupage_mcp/skills/school-day-summary/SKILL.md"
+          dist = pathlib.Path("dist")
+          wheels = sorted(dist.glob("*.whl"))
+          sdists = sorted(dist.glob("*.tar.gz"))
+          assert wheels, f"no wheel built in {dist.resolve()}"
+          assert sdists, f"no sdist built in {dist.resolve()}"
+
+          with zipfile.ZipFile(wheels[-1]) as zf:
+              assert SKILL in zf.namelist(), (
+                  f"{SKILL} is missing from {wheels[-1].name}; refusing to "
+                  "publish. Check [tool.setuptools.package-data] in pyproject.toml"
+              )
+              assert zf.read(SKILL).strip(), f"{SKILL} is empty in the wheel"
+          print(f"wheel {wheels[-1].name}: {SKILL} present")
+
+          with tarfile.open(sdists[-1]) as tf:
+              sdist_names = tf.getnames()
+          assert any(n.endswith(SKILL) for n in sdist_names), (
+              f"{SKILL} is missing from {sdists[-1].name}; refusing to publish"
+          )
+          print(f"sdist {sdists[-1].name}: {SKILL} present")
+          PY
+
       - name: Publish to PyPI (OIDC, no token)
         uses: pypa/gh-action-pypi-publish@v1.14.2
         with:
