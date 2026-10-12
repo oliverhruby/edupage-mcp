@@ -135,8 +135,10 @@ A single stdio MCP server exposing **31 tools** (published on PyPI as
   missing teachers, grades, meals, homework, assignments, absences, news,
   events, notifications for a date — "what happened yesterday at school" in a
   single round trip; each section is isolated so one failure doesn't kill the
-  report). Includes an OpenCode skill (`school-day-summary`) for human-readable
-  formatting in OpenCode; other clients use the raw JSON directly.
+  report). A bundled agent skill (`school-day-summary`) turns that JSON into a
+  human-readable daily report — install it with `edupage-mcp-full
+  install-skill` (see [Skills](#skills)); every client can also call
+  `get_day_summary` directly and read the JSON.
 - **Rosters** — `get_roster` (`roster_type=` for students, all students,
   teachers, classes, classrooms, or subjects), `get_my_students`
 - **Actions** — `send_message`, `switch_to_student`, `switch_to_parent`, `custom_request`
@@ -154,13 +156,33 @@ started, for example: "Install the EduPage MCP as described in this GitHub
 repository oliverhruby/edupage-mcp". Most MCP-capable clients can then guide
 you through the available setup options.
 
-**Option A — from MCP Registry (recommended, one-click in VS Code / GitHub Copilot)**
+**Option A — as an agent plugin (recommended: the server *and* the skill in one install)**
+
+For VS Code, GitHub Copilot and Claude Code this repo ships a plugin that
+installs the server together with the `school-day-summary` agent skill:
+
+```bash
+copilot plugin marketplace add oliverhruby/edupage-mcp
+copilot plugin install edupage@edupage-plugins
+```
+
+Claude Code reads the same marketplace:
+
+```bash
+claude plugin marketplace add oliverhruby/edupage-mcp
+claude plugin install edupage@edupage-plugins
+```
+
+opencode, Cursor and Windsurf read Agent Skills but not plugins — for those, and
+for every other install route, see [docs/PLUGINS.md](docs/PLUGINS.md).
+
+**Option B — from MCP Registry (one-click, server only, no skill)**
 
 The server is listed in the [MCP Registry](https://registry.modelcontextprotocol.io/).
 In VS Code or GitHub Copilot, search for "EduPage MCP" and install with one click.
 Or use the direct deeplink: `mcp://install/io.github.oliverhruby/edupage-mcp`
 
-**Option B — from PyPI**
+**Option C — from PyPI**
 
 Use this for normal usage with a released version.
 
@@ -175,7 +197,7 @@ pip install edupage-mcp-full
 `uvx` runs the package without a persistent install. If `uvx` is unavailable,
 install `uv` first (`pip install uv` or `winget install astral-sh.uv`).
 
-**Option C — from GitHub (latest source)**
+**Option D — from GitHub (latest source)**
 
 Use this if you want the latest changes before a PyPI release.
 
@@ -187,7 +209,7 @@ uvx --from "git+https://github.com/oliverhruby/edupage-mcp.git" edupage-mcp-full
 pip install "git+https://github.com/oliverhruby/edupage-mcp.git"
 ```
 
-**Option D — Docker**
+**Option E — Docker**
 
 Use this for an isolated container runtime.
 
@@ -238,7 +260,7 @@ prefer proper authentication and TLS via a reverse proxy or API gateway.
 > `FastMCP` to `MCPServer` and changed the API surface; this server targets the
 > FastMCP v1 API for simplicity and stability.
 
-**Option C — development from source**
+**Option F — development from source**
 
 Use this if you are contributing or debugging locally.
 
@@ -251,56 +273,6 @@ uv sync               # or: python -m venv .venv && .venv/bin/python -m pip inst
 uv run edupage-mcp-full
 ```
 
-**Option D — Docker**
-
-Use this for an isolated container runtime.
-
-Requirements: Docker.
-
-Pull a prebuilt image (recommended):
-
-```bash
-docker pull ghcr.io/oliverhruby/edupage-mcp:latest
-
-docker run --rm -i \
-  -e EDUPAGE_USERNAME=your_username \
-  -e EDUPAGE_PASSWORD=your_password \
-  ghcr.io/oliverhruby/edupage-mcp:latest
-```
-
-Version tags are also available (for example `v0.4.0`) if you prefer pinned
-images.
-
-Build locally from source (fallback):
-
-```bash
-docker build -t edupage-mcp-full .
-
-docker run --rm -i \
-  -e EDUPAGE_USERNAME=your_username \
-  -e EDUPAGE_PASSWORD=your_password \
-  edupage-mcp-full
-```
-
-The container uses the same environment variables described in
-[Configure credentials](#2-configure-credentials). It also includes a
-`HEALTHCHECK` (stdio process liveness by default; local TCP check in HTTP
-transport modes).
-
-For HTTP transports, set optional runtime vars:
-
-- `MCP_TRANSPORT`: `stdio` (default), `sse`, or `streamable-http`
-- `MCP_HOST`: bind host (default `127.0.0.1`)
-- `MCP_PORT`: bind port (default `8000`)
-- `MCP_API_KEY`: optional bearer token for HTTP auth
-
-When `MCP_API_KEY` is set, HTTP requests must include `Authorization: Bearer <key>`.
-If `MCP_API_KEY` is not set, HTTP endpoints are unauthenticated. For production,
-prefer proper authentication and TLS via a reverse proxy or API gateway.
-
-> `pyproject.toml` pins `mcp<2` (the stable FastMCP v1 API). `mcp 2.x` renamed
-> `FastMCP` to `MCPServer` and changed the API surface; this server targets the
-> FastMCP v1 API for simplicity and stability.
 
 ### 2. Configure credentials
 
@@ -372,7 +344,7 @@ After editing client config, **restart the client** so the MCP server is loaded.
 | "Find Student A's timetable for tomorrow" | `get_student_timetable name="Student A" date_str="2026-09-10"` | Student A's timetable; if found in multiple schools, one result per school. |
 | "List teachers and send a hello to Teacher456" | `get_roster roster_type="teachers"` → `send_message recipient_id="Teacher456" body="Hello!"` | Teacher list plus message sent confirmation. |
 | **"What happened at school yesterday for my kids?"** | `get_day_summary date_str="2026-09-09"` (discovery index) → `get_day_summary date_str="2026-09-09" name="Student A" subdomain="school-a"` → `... name="Student B" subdomain="school-b"` | **Discovery-first**: the no-name call lists each child per school; then one complete daily report call per child (timetable, substitutions, missing teachers, grades, meals, homework, assignments, absences, news, events, notifications). Keeps each response small and avoids mixing schools/students. |
-| **"How was school today for Student A?"** | `get_day_summary name="Student A"` (defaults to today) | Human-readable summary via the bundled OpenCode skill `school-day-summary`. |
+| **"How was school today for Student A?"** | `get_day_summary name="Student A"` (defaults to today) | Human-readable summary once you install the bundled `school-day-summary` skill (`edupage-mcp-full install-skill`). |
 
 ---
 
@@ -469,7 +441,7 @@ fully automatic.
 | `download_attachment` | Download any authenticated attachment to disk — absolute URL, or the relative `/elearning/…` key from `get_timeline`; refuses school/login pages (default `<tempdir>/homework`, never overwrites) | ✅ disk |
 | `get_timetable_changes` | Substitutions / timetable changes for a date |  |
 | `get_missing_teachers` | Teachers missing on a date |  |
-| `get_day_summary` | One-call daily report (timetable, substitutions, teachers, grades, meals incl. breakfast/dinner when published, homework, assignments, absences, news, events, notifications) for a date; student by name/id (role-aware). **Discovery-first**: parent without `name`/`student_id` returns a lightweight per-school student index (`mode:"discovery"`); pass `full=True` to build full reports for every child. Bundles OpenCode skill `school-day-summary` for human-readable output. |  |
+| `get_day_summary` | One-call daily report (timetable, substitutions, teachers, grades, meals incl. breakfast/dinner when published, homework, assignments, absences, news, events, notifications) for a date; student by name/id (role-aware). **Discovery-first**: parent without `name`/`student_id` returns a lightweight per-school student index (`mode:"discovery"`); pass `full=True` to build full reports for every child. Bundles the `school-day-summary` agent skill (installed with `edupage-mcp-full install-skill`) for human-readable output. |  |
 | `get_meals` | Meal menu (all 5 slots: breakfast, snack, lunch, afternoon snack, dinner) |  |
 | `choose_meal` | Order a meal | ✅ |
 | `sign_off_meal` | Cancel an ordered meal | ✅ |
@@ -516,23 +488,62 @@ fully automatic.
 
 ## Skills
 
-The package includes an **OpenCode skill** (`school-day-summary`) at
-`<site-packages>/edupage_mcp/skills/school-day-summary/SKILL.md`. It teaches
-OpenCode agents how to turn `get_day_summary` JSON into a human-readable daily
-school report.
+The package ships one **agent skill** (`school-day-summary`). It teaches a
+coding agent how to turn `get_day_summary` JSON into a human-readable daily
+school report — *"what happened yesterday for my kids?"*
 
-**OpenCode only:** To register it:
+Installing the [plugin](#1-install) ships this skill together with the server.
+To install the skill on its own:
+
 ```bash
-mkdir -p ~/.config/opencode/skills/school-day-summary
-cp <site-packages>/edupage_mcp/skills/school-day-summary/SKILL.md \
-   ~/.config/opencode/skills/school-day-summary/SKILL.md
-```
-Restart OpenCode; the agent can then answer *"what happened at school yesterday
-for my kids?"* by calling `get_day_summary` per child.
+# already installed with the server:
+edupage-mcp-full install-skill
 
-**Other MCP clients (Copilot, Claude, Cursor, etc.)** — call `get_day_summary`
-directly; they receive the full structured JSON. Formatting is client-specific
-(no skill system in the MCP protocol).
+# ...or with nothing but uv:
+uvx --from edupage-mcp-full edupage-mcp-full install-skill --agent copilot
+```
+
+Each agent it touches prints one line:
+
+```
+installed -> C:\Users\you\.copilot\skills\school-day-summary\SKILL.md
+skipped (identical) -> /home/you/.claude/skills/school-day-summary/SKILL.md
+skipped (exists, differs, use --force) -> /home/you/.agents/skills/school-day-summary/SKILL.md
+```
+
+Restart your agent afterwards so it picks the skill up.
+
+### Options
+
+| Option | Effect |
+|---|---|
+| `--agent {opencode,copilot,claude,agents,all}` | Install into that agent only. With no flag: every agent directory that already exists. `all` forces all four and creates the missing directories. |
+| `--print` | Print the resolved `SKILL.md` path and exit — writes nothing. |
+| `--dry-run` | Report what would be written, write nothing. |
+| `--force` | Overwrite an existing `SKILL.md` that differs. |
+
+### Where it goes
+
+| `--agent` | Installed to |
+|---|---|
+| `opencode` | `~/.config/opencode/skills/` |
+| `copilot` | `~/.copilot/skills/` |
+| `claude` | `~/.claude/skills/` |
+| `agents` | `~/.agents/skills/` — the cross-vendor location (Copilot, Codex, Cursor and opencode all honour it) |
+
+Re-running is safe: a file that is already identical is reported as
+`skipped (identical)`, and one that differs is left alone unless you pass
+`--force`, so a skill you edited locally is never silently clobbered.
+
+Prefer to place the file yourself? `edupage-mcp-full install-skill --print`
+prints the exact path of the bundled `SKILL.md` in the installed package.
+
+**Other MCP clients** (Claude, Cursor, or any client without a skill system) can
+just call `get_day_summary` directly — they receive the full structured JSON.
+Formatting is client-specific. The base MCP protocol has no skill concept (an
+`io.modelcontextprotocol/skills` extension is specified, but this server does not
+implement it yet), which is why distribution goes through the plugin and the
+installer above. See [docs/PLUGINS.md](docs/PLUGINS.md) for every install route.
 
 ---
 
