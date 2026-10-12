@@ -186,8 +186,9 @@ powershell -ExecutionPolicy Bypass -File run_e2e.ps1
   to raise, and `test_manifest.py` guarantees no write-capable tool is invoked.
 - Known upstream defects are tracked as `known_error` substrings and **fail
   the suite if the message changes** (e.g. `find_student` no-such-student,
-  `get_grades` `percent` UnboundLocalError in edupage-api 0.12.5). Fix in the
-  wrapper or bump upstream when they drift.
+  `get_homework_material` no-material-data). Fix in the wrapper or bump
+  upstream when they drift, then delete the `known_error` entry — a stale one
+  hides a regression behind an expected error.
 - A drift report is written to `reports/e2e-report.json` (gitignored) with
   full payload previews — the local report stays on the machine.
 

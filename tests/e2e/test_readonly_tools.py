@@ -46,11 +46,7 @@ TOOLS = {
     "get_next_ringing_time": {"subdomain": "@sub"},
     "get_next_week_timetable": {"subdomain": "@sub"},
     "get_periods": {"subdomain": "@sub"},
-    # Upstream edupage-api 0.12.5 defect: get_grades() raises UnboundLocalError
-    # on 'percent' when a grade entry has a grade_type outside 1/2/3 (the
-    # except branch never assigns percent). Tracked, checked so the suite fails
-    # if upstream fixes or changes this.
-    "get_grades": {"subdomain": "@sub", "known_error": "cannot access local variable 'percent'"},
+    "get_grades": {"subdomain": "@sub"},
     # history mode exercises the client.get_notification_history() upstream path;
     # 'recent'/other categories are thin filters over get_notifications().
     "get_timeline": {
