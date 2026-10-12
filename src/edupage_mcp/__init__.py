@@ -911,7 +911,8 @@ def get_my_timetable(date_str: Optional[str] = None, subdomain: Optional[str] = 
         d = _parse_date(date_str)
         try:
             tt = client.get_my_timetable(d)
-        except (IndexError, KeyError, AttributeError, TypeError):
+        except (edupage_exceptions.MissingDataException,
+                IndexError, KeyError, AttributeError, TypeError):
             tt = None
         if tt is None:
             return {"date": d.isoformat(), "subdomain": _resolve_subdomain(subdomain), "lessons": []}
@@ -1123,10 +1124,12 @@ def _get_student_timetable(client, sub, student, d):
 
     if is_parent:
         # Preferred path: query the child's timetable directly with a concrete
-        # EduStudent. The upstream switch_to_child + get_my_timetable path is
-        # broken for parents (IndexError inside __get_date_plan) and, when the
-        # following switch_to_parent fails, leaves the shared session stuck in
-        # child mode — corrupting every later call. Avoid switching entirely.
+        # EduStudent. switch_to_child + get_my_timetable does work upstream
+        # since edupage-api 0.12.6 (switch_to_child records the selection,
+        # switch_to_parent clears it, get_my_timetable serves the selected
+        # child), but a failing switch_to_parent still leaves the shared
+        # session stuck in child mode -- corrupting every later call. Avoid
+        # switching entirely.
         real = _resolve_edustudent(client, sid)
         if real is not None:
             try:
@@ -1229,7 +1232,8 @@ def _target_timetable_day(client, target_type: str, target_id: str, d, subdomain
     target = _resolve_target(client, target_type, target_id)
     try:
         tt = client.get_timetable(target, d)
-    except (IndexError, KeyError, AttributeError, TypeError):
+    except (edupage_exceptions.MissingDataException,
+            IndexError, KeyError, AttributeError, TypeError):
         tt = None
     base = {"target": f"{target_type}:{target_id}", "date": d.isoformat(),
             "subdomain": _resolve_subdomain(subdomain)}
@@ -1340,7 +1344,8 @@ def get_next_week_timetable(subdomain: Optional[str] = None) -> dict:
             d = monday + _dt.timedelta(days=i)
             try:
                 tt = client.get_my_timetable(d)
-            except (IndexError, KeyError, AttributeError, TypeError):
+            except (edupage_exceptions.MissingDataException,
+                    IndexError, KeyError, AttributeError, TypeError):
                 tt = None
             if tt is None:
                 lessons = []
@@ -1997,7 +2002,7 @@ def get_missing_teachers(date_str: Optional[str] = None, subdomain: Optional[str
 # --------------------------------------------------------------------------
 # Meals
 # --------------------------------------------------------------------------
-# edupage-api 0.12.5's `get_meals` parses the per-student meal-ordering page
+# edupage-api 0.13.2's `get_meals` parses the per-student meal-ordering page
 # ("novyListok") only in the shape where each day is a dict keyed "1"/"2"/"3",
 # and crashes (AttributeError) when a school publishes the day as a list of
 # serving windows instead. We therefore keep two wrapper-level fallbacks so
@@ -2110,7 +2115,7 @@ def _strip_recipe_code(name):
 
 def _fetch_novylistok(client, day):
     """Fetch the per-student meal-ordering page and parse day entries published
-    in the serving-windows (list) shape that edupage-api 0.12.5 cannot handle.
+    in the serving-windows (list) shape that edupage-api 0.13.2 cannot handle.
     Returns the same slot-keyed dict as _parse_canteen_menu, or None when the
     page doesn't carry a day entry (school uses the old shape / no meals)."""
     sub = client.subdomain
@@ -2435,7 +2440,8 @@ def _timeline_on_day(client, d, types, *, prefer_deadline=False):
 def _my_timetable_lessons(client, d):
     try:
         tt = client.get_my_timetable(d)
-    except (IndexError, KeyError, AttributeError, TypeError):
+    except (edupage_exceptions.MissingDataException,
+            IndexError, KeyError, AttributeError, TypeError):
         tt = None
     return [_serialize(ls) for ls in tt.lessons] if tt else []
 
