@@ -2316,17 +2316,48 @@ def sign_off_meal(date_str: str, meal_type: str, subdomain: Optional[str] = None
 
 @_tool
 def rate_meal(date_str: str, meal_type: str, quality: int, quantity: int, subdomain: Optional[str] = None) -> dict:
-    """Rate a meal. Writes: submits quality/quantity ratings for a date and meal type.
+    """Rate the taste and portion size of a meal. Writes: submits both scores
+    and overwrites whatever rating this account's student already gave for that
+    date and meal type.
+
+    One rating per (date, meal_type), filed against the student the session is
+    logged in as. It replaces the previous rating outright — no history is kept
+    and no tool here undoes it — so the call is safe to repeat with the same
+    scores, but changing a score means submitting again and losing the old one.
+
+    Rate a meal the student actually ate. Read `get_meals` first to confirm the
+    slot is published and to see the current averages. Not an ordering tool:
+    `choose_meal` books a menu and `sign_off_meal` releases the booking, and
+    neither records a rating. Only the three canteen slots can be rated —
+    breakfast and dinner, which `get_meals` also returns, carry no rating board
+    and fail with "No 'breakfast' meal available".
 
     Args:
-        date_str: YYYY-MM-DD of the meal.
-        meal_type: 'snack' | 'lunch' | 'afternoon_snack'.
-        quality: Taste rating, 1-5.
-        quantity: Portion-size rating, 1-5.
+        date_str: YYYY-MM-DD of the meal that was eaten.
+        meal_type: 'snack' | 'lunch' | 'afternoon_snack' — the slots
+            `choose_meal` and `sign_off_meal` also accept, and the only ones
+            with a rating board.
+        quality: Taste, 1 (inedible) to 5 (excellent), integer.
+        quantity: Portion size, 1 (far too little) to 5 (far too much),
+            integer. Submitted in the same request as `quality`; neither score
+            can be left out or rated on its own.
         subdomain: School to query (defaults to the active subdomain).
 
     Returns:
-        dict: {'rated': True, meal_type, date}.
+        dict: {'rated': True, 'meal_type', 'date'}. The scores are not echoed
+        back — re-read `get_meals` to confirm what was recorded.
+
+    Notes:
+        - Fails with "No rating available for this meal" when the school has not
+          opened ratings for that menu, and with a "Missing boarder id" error
+          when the session carries no canteen list to file the score against —
+          `switch_to_student` first if one login covers several children.
+        - The score posts to the school's canteen endpoint under that dining id
+          and counts towards the averages `get_meals` shows, so it reaches the
+          canteen and cannot be deleted through this server.
+        - Upstream sends a fixed meal-slot field ("jedlo_dna" = 2, lunch) with
+          the rating, so a snack or afternoon-snack score is recorded against
+          the lunch entry.
     """
     def go():
         client = _require_client(subdomain)
