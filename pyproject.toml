@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "edupage-mcp-full"
-version = "0.6.0"
+version = "0.6.1"
 description = "Full-feature EduPage MCP server: timetables, grades, homework, meals (ordering), messages, role-aware student switching, 2FA, multi-school with automatic student discovery, tiered name matching, and student cache."
 readme = "README.md"
 license = { text = "MIT" }
@@ -25,7 +25,7 @@ classifiers = [
 ]
 dependencies = [
     "mcp<2",
-    "edupage-api>=0.12.7",
+    "edupage-api>=0.13.2",
     # Pulled in transitively via requests <- edupage-api. Pinned explicitly so
     # the floor for CVE-2026-97687 / CVE-2026-97689 (fixed in 2.8.0) is
     # enforced in our own metadata instead of depending on the resolver.

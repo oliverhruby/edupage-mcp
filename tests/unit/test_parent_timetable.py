@@ -3,9 +3,9 @@
 These run with NO network. They validate the wrapper logic that previously hit
 upstream defects every release:
 
-- `switch_to_child` + `get_my_timetable` for parents raises IndexError inside
-  edupage-api's `__get_date_plan`, and the failed `switch_to_parent()` left the
-  shared session stuck in child mode.
+- A failing `switch_to_parent()` left the shared session stuck in child mode.
+  (The accompanying IndexError inside `__get_date_plan` was fixed upstream in
+  edupage-api 0.12.6, but the stuck-session half is still real.)
 - The old fallback then handed a `SimpleNamespace`/`EduStudentSkeleton` to
   `client.get_timetable()`, which keys its lookup by the *exact* Python type
   (`timetables.py: lookup.get(type(target))`) and blew up with
