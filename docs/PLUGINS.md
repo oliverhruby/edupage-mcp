@@ -2,8 +2,8 @@
 
 This repo ships the EduPage MCP server **and** one agent skill
 (`school-day-summary`). This document explains every artifact in the package,
-how to install it in each host, and how to keep the two copies of
-`SKILL.md` from drifting.
+how to install it in each host, and how to keep the copies of `SKILL.md` from
+drifting.
 
 ## What is in the box
 
@@ -16,16 +16,27 @@ how to install it in each host, and how to keep the two copies of
 | `plugin/skills/` | **Generated mirror** of the canonical tree. Written only by `scripts/sync_skills.py`; never hand-edited. |
 | `plugin/.claude-plugin/plugin.json` | Claude Code manifest for the same directory. Adds the parts Claude supports and Agent Plugins does not: `mcpServers` and a `userConfig` block. |
 | `.claude-plugin/marketplace.json` | The marketplace catalog. **Read by both** Claude Code and GitHub Copilot from this one file. |
+| `apm.yml` | The **APM (OpenAPM)** manifest. Declares the package (`name`, `version` tracking `pyproject.toml`) plus the same self-defined stdio MCP server as `plugin/mcp.json`. |
+| `.apm/skills/` | **Generated mirror** of the canonical tree for [APM](https://microsoft.github.io/apm/), which discovers primitives under `.apm/skills/<name>/`. Written only by `scripts/sync_skills.py`; never hand-edited. |
 
-### Why SKILL.md exists twice, and not three times
+### Why SKILL.md exists in three places
 
-Agent Plugins 1.0 §6.1 fixes component locations: a skill must be at
-`<plugin root>/skills/<name>/SKILL.md`, and the manifest cannot point anywhere
-else. The canonical copy lives in the Python package, so a plugin directory
-needs a second copy. That is the floor — two copies.
+Two standards fix the skill location, and neither lets the manifest point
+elsewhere:
 
-The third copy would be a Claude-only `skills/` tree. It is avoided by making
-`plugin/` satisfy **both** layouts at once:
+* Agent Plugins 1.0 §6.1: a skill must be at
+  `<plugin root>/skills/<name>/SKILL.md`.
+* APM: primitives live under the package root at
+  `.apm/skills/<name>/SKILL.md`.
+
+The canonical copy lives in the Python package, so each of those standards
+needs its own copy on disk. Three copies of the same file is worse than one,
+so they drift the moment someone edits one and forgets the others — hence
+`scripts/sync_skills.py`, the single writer for both mirrors (see
+[Keeping the mirror in sync](#keeping-the-mirror-in-sync)).
+
+Within the plugin, a third *Claude-only* `skills/` tree is still avoided by
+making `plugin/` satisfy **both** plugin layouts at once:
 
 * Agent Plugins reads `plugin/plugin.json` + `plugin/mcp.json` + `plugin/skills/`.
 * Claude Code reads `plugin/.claude-plugin/plugin.json` + the default `plugin/skills/`.
@@ -134,6 +145,23 @@ no sync step. Configure the MCP server separately in the host's own MCP config �
 `uvx` is required — the plugin does not vendor a virtualenv, and
 `plugin/mcp.json` deliberately never names a local path.
 
+### (e) Any APM-capable harness — one shot (skill + server)
+
+[APM](https://microsoft.github.io/apm/) (Agent Package Manager) is an emerging
+open standard for distributing agent context — think npm for agent skills, MCP
+servers and instructions. With the [APM CLI](https://microsoft.github.io/apm/getting-started/installation/)
+installed, one command deploys the `school-day-summary` skill into the
+harness's skills directory *and* writes the `uvx edupage-mcp-full` stdio MCP
+server config into the detected harness (Claude Code, GitHub Copilot, Cursor,
+opencode, Codex, and others):
+
+```bash
+apm install oliverhruby/edupage-mcp
+```
+
+This route reads the repo-root `apm.yml` and the `.apm/skills/` mirror; the
+existing plugin/marketplace installs above remain supported and unchanged.
+
 ## Credentials
 
 The server reads three environment variables at startup:
@@ -165,8 +193,8 @@ server's `env` as `${user_config.*}`.
 
 ## Keeping the mirror in sync
 
-`src/edupage_mcp/skills/` is canonical. `plugin/skills/` is generated. After
-editing any skill:
+`src/edupage_mcp/skills/` is canonical. `plugin/skills/` (Agent Plugins 1.0)
+and `.apm/skills/` (APM) are generated. After editing any skill:
 
 ```bash
 python scripts/sync_skills.py            # copy (default; --write is the same)

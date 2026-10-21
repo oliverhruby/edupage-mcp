@@ -32,3 +32,7 @@ Thumbs.db
 # NEVER be committed or uploaded to public CI.
 reports/
 tests/e2e/.local*
+
+# APM (Agent Package Manager) local state
+apm_modules/
+apm.lock.yaml

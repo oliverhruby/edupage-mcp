@@ -176,13 +176,31 @@ claude plugin install edupage@edupage-plugins
 opencode, Cursor and Windsurf read Agent Skills but not plugins — for those, and
 for every other install route, see [docs/PLUGINS.md](docs/PLUGINS.md).
 
-**Option B — from MCP Registry (one-click, server only, no skill)**
+**Option B — one-shot with [APM](https://microsoft.github.io/apm/) (the server *and* the skill in one command)**
+
+[APM](https://microsoft.github.io/apm/) (Agent Package Manager) is an emerging
+open standard for distributing agent context — think npm for agent skills, MCP
+servers and instructions. Install [the CLI](https://microsoft.github.io/apm/getting-started/installation/)
+once, then a single command deploys the `school-day-summary` skill into the
+harness's skills directory *and* writes the `uvx edupage-mcp-full` stdio MCP
+server config into the detected harness (Claude Code, GitHub Copilot, Cursor,
+opencode, Codex, and others):
+
+```bash
+apm install oliverhruby/edupage-mcp
+```
+
+The Claude Code plugin/marketplace install (Option A) remains supported and
+unchanged — APM is an additional install route, declared in this repo's
+`apm.yml`.
+
+**Option C — from MCP Registry (one-click, server only, no skill)**
 
 The server is listed in the [MCP Registry](https://registry.modelcontextprotocol.io/).
 In VS Code or GitHub Copilot, search for "EduPage MCP" and install with one click.
 Or use the direct deeplink: `mcp://install/io.github.oliverhruby/edupage-mcp`
 
-**Option C — from PyPI**
+**Option D — from PyPI**
 
 Use this for normal usage with a released version.
 
@@ -197,7 +215,7 @@ pip install edupage-mcp-full
 `uvx` runs the package without a persistent install. If `uvx` is unavailable,
 install `uv` first (`pip install uv` or `winget install astral-sh.uv`).
 
-**Option D — from GitHub (latest source)**
+**Option E — from GitHub (latest source)**
 
 Use this if you want the latest changes before a PyPI release.
 
@@ -209,7 +227,7 @@ uvx --from "git+https://github.com/oliverhruby/edupage-mcp.git" edupage-mcp-full
 pip install "git+https://github.com/oliverhruby/edupage-mcp.git"
 ```
 
-**Option E — Docker**
+**Option F — Docker**
 
 Use this for an isolated container runtime.
 
@@ -260,7 +278,7 @@ prefer proper authentication and TLS via a reverse proxy or API gateway.
 > `FastMCP` to `MCPServer` and changed the API surface; this server targets the
 > FastMCP v1 API for simplicity and stability.
 
-**Option F — development from source**
+**Option G — development from source**
 
 Use this if you are contributing or debugging locally.
 

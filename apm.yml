@@ -1,0 +1,14 @@
+name: edupage-mcp
+version: 0.7.0
+description: Full-feature EduPage MCP server (timetables, grades, homework, meals, messages, day summaries) with the bundled school-day-summary agent skill.
+author: Oliver Hruby
+license: MIT
+repository: https://github.com/oliverhruby/edupage-mcp
+homepage: https://github.com/oliverhruby/edupage-mcp
+dependencies:
+  mcp:
+    - name: edupage
+      registry: false
+      transport: stdio
+      command: uvx
+      args: ["edupage-mcp-full"]

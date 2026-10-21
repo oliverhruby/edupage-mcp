@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Mirror the canonical agent skills into the plugin package.
+"""Mirror the canonical agent skills into every ecosystem's skills tree.
 
 The canonical copy of every skill lives in the distributed Python package, at
 ``src/edupage_mcp/skills/<name>/SKILL.md`` — it ships in the wheel (see the
 ``tool.setuptools.package-data`` entry in ``pyproject.toml``) and is what the
 manual "copy it out of site-packages" install path uses.
 
-Agent Plugins 1.0 requires a skill to live at the fixed, non-configurable
-location ``<plugin root>/skills/<name>/SKILL.md``, so a one-click install needs
-a second copy inside ``plugin/``. Two copies of the same file is one too many:
-they drift the moment someone edits the frontmatter of one and forgets the
-other. This script is the single writer for the second copy:
+Two other standards fix the skill location, so each needs its own mirror:
+
+* Agent Plugins 1.0 requires ``<plugin root>/skills/<name>/SKILL.md``, hence
+  the copy inside ``plugin/``.
+* Agent Package Manager (APM/OpenAPM) discovers primitives under
+  ``.apm/skills/<name>/SKILL.md`` at the package root, hence the copy inside
+  ``.apm/``.
+
+More copies of the same file means more drift: they go stale the moment
+someone edits the frontmatter of one and forgets the others. This script is
+the single writer for every mirror:
 
     python scripts/sync_skills.py            # copy (default; same as --write)
     python scripts/sync_skills.py --write    # copy, stated explicitly
@@ -19,13 +25,14 @@ other. This script is the single writer for the second copy:
 ``--check`` is the CI form: it writes nothing, prints every offending path, and
 exits 1 so a stale mirror fails the build instead of shipping. Both modes are
 deterministic and idempotent, create parent directories as needed, and never
-read or write anything outside the two skills trees.
+read or write anything outside the skills trees.
 
 Only ``--source`` / ``--dest`` may move the roots (the unit tests use them to
-operate on a temporary tree instead of the real repository).
+operate on a temporary tree instead of the real repository). ``--dest`` is
+repeatable; passing it replaces the default mirror list.
 
-Exit code is 0 when the mirror matches the canonical tree and 1 when it drifts.
-Uses only the Python standard library.
+Exit code is 0 when every mirror matches the canonical tree and 1 when any
+drifts. Uses only the Python standard library.
 """
 
 from __future__ import annotations
@@ -41,8 +48,11 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 #: Canonical skills tree — the copy that ships inside the Python package.
 DEFAULT_SOURCE = REPO_ROOT / "src" / "edupage_mcp" / "skills"
 
-#: Generated mirror — the copy Agent Plugins 1.0 clients discover.
-DEFAULT_DEST = REPO_ROOT / "plugin" / "skills"
+#: Generated mirrors — the copies each downstream standard discovers.
+DEFAULT_DESTS = (
+    REPO_ROOT / "plugin" / "skills",  # Agent Plugins 1.0 (fixed location)
+    REPO_ROOT / ".apm" / "skills",  # APM / OpenAPM primitives
+)
 
 
 def relative_files(root: pathlib.Path) -> list[pathlib.Path]:
@@ -119,19 +129,19 @@ def sync(source: pathlib.Path, dest: pathlib.Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Mirror src/edupage_mcp/skills/ into the plugin's skills/ tree.",
+        description="Mirror src/edupage_mcp/skills/ into the plugin/ and .apm/ skills trees.",
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--check",
         action="store_true",
-        help="verify the mirror matches the canonical tree; write nothing and "
+        help="verify every mirror matches the canonical tree; write nothing and "
              "exit 1 on any drift",
     )
     mode.add_argument(
         "--write",
         action="store_true",
-        help="copy the canonical tree into the mirror (the default)",
+        help="copy the canonical tree into every mirror (the default)",
     )
     parser.add_argument(
         "--source",
@@ -142,39 +152,47 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--dest",
         type=pathlib.Path,
-        default=DEFAULT_DEST,
-        help=f"mirror skills tree (default: {display(DEFAULT_DEST)})",
+        action="append",
+        default=None,
+        help="mirror skills tree; repeat for multiple mirrors "
+             f"(default: {', '.join(display(d) for d in DEFAULT_DESTS)})",
     )
     args = parser.parse_args(argv)
 
     source = args.source.resolve()
-    dest = args.dest.resolve()
+    dests = [d.resolve() for d in (args.dest or DEFAULT_DESTS)]
 
     if not source.is_dir():
         print(f"ERROR: canonical skills tree not found: {display(source)}")
         return 1
 
     if args.check:
-        missing_or_changed, extra = plan(source, dest)
-        if not missing_or_changed and not extra:
-            print(f"OK: {display(dest)} is in sync with {display(source)}")
-            return 0
-        print(
-            f"DRIFT: {display(dest)} does not match {display(source)} "
-            f"({len(missing_or_changed)} missing/changed, {len(extra)} stale). "
-            f"Run: python scripts/sync_skills.py"
-        )
-        for rel in missing_or_changed:
-            print(f"  missing/changed: {display(dest / rel)}")
-        for rel in extra:
-            print(f"  stale:           {display(dest / rel)}")
-        return 1
+        drifted = False
+        for dest in dests:
+            missing_or_changed, extra = plan(source, dest)
+            if not missing_or_changed and not extra:
+                print(f"OK: {display(dest)} is in sync with {display(source)}")
+                continue
+            drifted = True
+            print(
+                f"DRIFT: {display(dest)} does not match {display(source)} "
+                f"({len(missing_or_changed)} missing/changed, {len(extra)} stale). "
+                f"Run: python scripts/sync_skills.py"
+            )
+            for rel in missing_or_changed:
+                print(f"  missing/changed: {display(dest / rel)}")
+            for rel in extra:
+                print(f"  stale:           {display(dest / rel)}")
+        return 1 if drifted else 0
 
-    written = sync(source, dest)
-    print(
-        f"Wrote {written} file(s) from {display(source)} to {display(dest)} "
-        f"({len(relative_files(dest))} file(s) in the mirror)"
-    )
+    total = 0
+    for dest in dests:
+        written = sync(source, dest)
+        total += written
+        print(
+            f"Wrote {written} file(s) from {display(source)} to {display(dest)} "
+            f"({len(relative_files(dest))} file(s) in the mirror)"
+        )
     return 0
 
 

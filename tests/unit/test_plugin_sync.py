@@ -1,13 +1,16 @@
-"""Unit tests for the one-click plugin packaging and the skills mirror.
+"""Unit tests for the one-click plugin packaging and the skills mirrors.
 
-Three separate contracts are covered here:
+Four separate contracts are covered here:
 
-1. ``scripts/sync_skills.py`` keeps ``plugin/skills/`` byte-identical to the
+1. ``scripts/sync_skills.py`` keeps every mirror — ``plugin/skills/`` (Agent
+   Plugins 1.0) and ``.apm/skills/`` (APM/OpenAPM) — byte-identical to the
    canonical ``src/edupage_mcp/skills/``. Drift in either direction fails.
 2. The two plugin manifests follow the specs they claim: ``plugin.json`` uses
    only the CLOSED Agent Plugins 1.0 key set, and ``mcp.json`` launches the
    public PyPI form of the server rather than a developer's local checkout.
 3. The canonical ``SKILL.md`` frontmatter satisfies the Agent Skills spec.
+4. The root ``apm.yml`` stays version-aligned with ``pyproject.toml`` and
+   declares the same self-defined stdio MCP server as ``plugin/mcp.json``.
 
 Nothing here mutates the real repository: the drift tests run against
 temporary trees, and the byte-identity test only reads.
@@ -31,6 +34,8 @@ _SYNC_SCRIPT = REPO / "scripts" / "sync_skills.py"
 
 CANONICAL_SKILL = REPO / "src" / "edupage_mcp" / "skills" / "school-day-summary" / "SKILL.md"
 MIRRORED_SKILL = REPO / "plugin" / "skills" / "school-day-summary" / "SKILL.md"
+APM_SKILL = REPO / ".apm" / "skills" / "school-day-summary" / "SKILL.md"
+APM_MANIFEST = REPO / "apm.yml"
 PLUGIN_JSON = REPO / "plugin" / "plugin.json"
 MCP_JSON = REPO / "plugin" / "mcp.json"
 CLAUDE_PLUGIN_JSON = REPO / "plugin" / ".claude-plugin" / "plugin.json"
@@ -205,9 +210,44 @@ def test_write_rejects_a_missing_canonical_tree(sync_skills, tmp_path):
 # --------------------------------------------------------------------------
 
 
-def test_canonical_and_mirrored_skill_are_byte_identical():
-    assert MIRRORED_SKILL.is_file(), "run: python scripts/sync_skills.py"
-    assert MIRRORED_SKILL.read_bytes() == CANONICAL_SKILL.read_bytes()
+@pytest.mark.parametrize("mirror", [MIRRORED_SKILL, APM_SKILL], ids=["plugin", "apm"])
+def test_canonical_and_mirrored_skill_are_byte_identical(mirror):
+    assert mirror.is_file(), "run: python scripts/sync_skills.py"
+    assert mirror.read_bytes() == CANONICAL_SKILL.read_bytes()
+
+
+# --------------------------------------------------------------------------
+# APM manifest (apm.yml)
+# --------------------------------------------------------------------------
+
+
+def test_apm_manifest_version_matches_pyproject():
+    """pyproject.toml is the version source of truth; apm.yml follows it."""
+    text = APM_MANIFEST.read_text(encoding="utf-8")
+    pyproject = (REPO / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
+    assert match, "no version in pyproject.toml"
+    apm_version = re.search(r'^version:\s*["\']?([^"\'\s]+)', text, re.MULTILINE)
+    assert apm_version, "no version in apm.yml"
+    assert apm_version.group(1) == match.group(1)
+
+
+def test_apm_manifest_declares_the_same_mcp_server_as_the_plugin(manifests):
+    """apm.yml's self-defined stdio entry must mirror plugin/mcp.json."""
+    text = APM_MANIFEST.read_text(encoding="utf-8")
+    server = manifests["mcp.json"]["mcpServers"]["edupage"]
+    assert "name: edupage" in text
+    assert "registry: false" in text
+    assert f"transport: {server['type']}" in text
+    assert f"command: {server['command']}" in text
+    assert "edupage-mcp-full" in server["args"]
+
+
+def test_apm_manifest_carries_no_absolute_paths_or_local_secrets():
+    """Personal-machine config must never reach a public file."""
+    text = APM_MANIFEST.read_text(encoding="utf-8")
+    for bad in FORBIDDEN_SUBSTRINGS:
+        assert bad not in text, f"apm.yml leaks {bad!r}"
 
 
 # --------------------------------------------------------------------------
