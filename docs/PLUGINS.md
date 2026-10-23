@@ -149,15 +149,38 @@ no sync step. Configure the MCP server separately in the host's own MCP config �
 
 [APM](https://microsoft.github.io/apm/) (Agent Package Manager) is an emerging
 open standard for distributing agent context — think npm for agent skills, MCP
-servers and instructions. With the [APM CLI](https://microsoft.github.io/apm/getting-started/installation/)
-installed, one command deploys the `school-day-summary` skill into the
-harness's skills directory *and* writes the `uvx edupage-mcp-full` stdio MCP
-server config into the detected harness (Claude Code, GitHub Copilot, Cursor,
-opencode, Codex, and others):
+servers and instructions. It is optional; this route is the only one here that
+installs the skill *and* the server configuration in a single step.
+
+Install the CLI once (`brew install apm`, `winget install --id Microsoft.APM -e`,
+or `pip install apm-cli`; see the
+[installation docs](https://microsoft.github.io/apm/getting-started/installation/)),
+then:
 
 ```bash
 apm install oliverhruby/edupage-mcp
 ```
+
+That deploys the `school-day-summary` skill into the harness's skills directory
+*and* writes the `uvx edupage-mcp-full` stdio server config into the detected
+harness (Claude Code, GitHub Copilot, Cursor, opencode, Codex, and others). Add
+`--target claude` (or another target) to force one harness. `uvx` must be on
+`PATH` — the package does not vendor a virtualenv.
+
+Verify:
+
+```bash
+apm mcp list
+```
+
+`apm uninstall oliverhruby/edupage-mcp` removes the package and the deployed
+skill files, but leaves the MCP server entry in `.mcp.json`; delete it there if
+you want it gone.
+
+Pin an exact revision with `#<sha>` (or `#<tag>` once a release contains
+`apm.yml`) to silence APM's "dependency unpinned" warning; without a pin,
+`apm.lock.yaml` records the resolved commit. Tags up to `v0.7.0` predate the
+manifest, so use a commit sha until the next release.
 
 This route reads the repo-root `apm.yml` and the `.apm/skills/` mirror; the
 existing plugin/marketplace installs above remain supported and unchanged.

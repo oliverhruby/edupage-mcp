@@ -176,19 +176,53 @@ claude plugin install edupage@edupage-plugins
 opencode, Cursor and Windsurf read Agent Skills but not plugins — for those, and
 for every other install route, see [docs/PLUGINS.md](docs/PLUGINS.md).
 
-**Option B — one-shot with [APM](https://microsoft.github.io/apm/) (the server *and* the skill in one command)**
+**Option B — one-shot with [APM](https://microsoft.github.io/apm/) (the server *and* the skill in one command, optional, emerging standard)**
 
 [APM](https://microsoft.github.io/apm/) (Agent Package Manager) is an emerging
 open standard for distributing agent context — think npm for agent skills, MCP
-servers and instructions. Install [the CLI](https://microsoft.github.io/apm/getting-started/installation/)
-once, then a single command deploys the `school-day-summary` skill into the
-harness's skills directory *and* writes the `uvx edupage-mcp-full` stdio MCP
-server config into the detected harness (Claude Code, GitHub Copilot, Cursor,
-opencode, Codex, and others):
+servers and instructions. This route is **optional**: Option A and every route
+below work exactly as before. If you already use APM (or want to try it), it is
+the only cross-harness one-shot install here.
 
-```bash
-apm install oliverhruby/edupage-mcp
-```
+1. Install the CLI once. Requirements: `git`, plus `uv` for the server runtime.
+   - Windows: `winget install --id Microsoft.APM -e` (or `scoop bucket add apm https://github.com/microsoft/scoop-apm; scoop install apm`)
+   - macOS / Linux: `brew install apm`
+   - Any platform with Python 3.10+: `pip install apm-cli`
+   - Other options: [installation docs](https://microsoft.github.io/apm/getting-started/installation/)
+
+2. Install this package:
+
+   ```bash
+   apm install oliverhruby/edupage-mcp
+   ```
+
+   One command does both:
+
+   - deploys the `school-day-summary` skill into the harness's skills directory
+     (`.claude/skills/`, `.agents/skills/`, ...);
+   - writes the `uvx edupage-mcp-full` stdio server entry into the MCP config of
+     every harness APM detects (Claude Code, GitHub Copilot, Cursor, opencode,
+     Codex, Gemini, Windsurf, Kiro, ...); add `--target claude` (or another
+     target) to force one harness.
+
+3. Verify:
+
+   ```bash
+   apm mcp list        # server registered?
+   ```
+
+   `apm uninstall oliverhruby/edupage-mcp` removes the package and the deployed
+   skill files, but **leaves the MCP server entry** it wrote into `.mcp.json`
+   (and other harness configs) — delete that entry yourself if you want it gone.
+
+Credentials are never embedded in the package: set `EDUPAGE_USERNAME` /
+`EDUPAGE_PASSWORD` (and `EDUPAGE_SUBDOMAINS` for multi-school accounts) **before**
+running `apm install` — see [2. Configure credentials](#2-configure-credentials).
+
+**Pinning.** Append `#<sha>` (or `#<tag>` once a release contains `apm.yml`) to
+pin an exact revision and silence APM's "dependency unpinned" warning; without
+a pin, APM records the resolved commit in `apm.lock.yaml`. Releases up to
+`v0.7.0` predate the manifest, so use a commit sha until the next release.
 
 The Claude Code plugin/marketplace install (Option A) remains supported and
 unchanged — APM is an additional install route, declared in this repo's
